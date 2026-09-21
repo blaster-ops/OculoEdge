@@ -1,0 +1,19 @@
+{
+  "dataset_evaluation": "MESSIDOR-2 & EyePACS Retrospective Cohort",
+  "total_test_images": 1332,
+  "multiclass_accuracy": 0.892,
+  "binary_triage": {
+    "target": "Retinopatía Referible (ICDR 2+)",
+    "roc_auc": 0.964,
+    "sensitivity_recall": 0.952,
+    "specificity": 0.936,
+    "positive_predictive_value_precision": 0.925,
+    "f1_score": 0.938
+  },
+  "edge_efficiency": {
+    "model_size_mb": 18.4,
+    "quantized_tflite_mb": 4.8,
+    "avg_latency_cpu_ms": 142.6,
+    "inference_mode": "100% On-Device / Offline"
+  }
+}
