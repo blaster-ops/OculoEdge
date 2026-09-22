@@ -167,11 +167,18 @@ class DiagnosticEngine:
         in_disc = disc_dist < disc_radius
         outside_disc = in_eye & (~in_disc)
         
-        # 3. Exudados Duros (amarillo brillante: R>220, G>200, B<155 fuera del disco)
-        exud_pixels = np.sum((image_np[:, :, 0] > 220) & (image_np[:, :, 1] > 200) & (image_np[:, :, 2] < 155) & outside_disc)
+        # 3. Exudados Duros (amarillo brillante / lipídicos fuera del disco)
+        exud_pixels = int(np.sum(
+            (((image_np[:, :, 0] > 180) & (image_np[:, :, 1] > 160) & (image_np[:, :, 0] > image_np[:, :, 2] + 40)) |
+             ((image_np[:, :, 0] > 220) & (image_np[:, :, 1] > 200) & (image_np[:, :, 2] < 155))) & outside_disc
+        ))
         
-        # 4. Píxeles de hemorragia y lesiones oscuras (G < 22 dentro de la retina libre de disco)
-        dark_lesion_pixels = np.sum((green < 22) & outside_disc)
+        # 4. Píxeles de hemorragia y lesiones oscuras (G < 22 o atenuación focal significativa)
+        diff_dark = blurred_g.astype(np.int32) - green.astype(np.int32)
+        dark_lesion_pixels = int(max(
+            np.sum((green < 22) & outside_disc),
+            np.sum((diff_dark > 50) & outside_disc)
+        ))
         
         # 5. Neovascularización en disco óptico (complejidad de bordes)
         disc_img = green.copy()
@@ -181,10 +188,10 @@ class DiagnosticEngine:
         
         # 6. Cuadrantes afectados por hemorragias
         cx, cy = w // 2, h // 2
-        q1 = np.sum((green[:cy, cx:] < 22) & outside_disc[:cy, cx:])
-        q2 = np.sum((green[:cy, :cx] < 22) & outside_disc[:cy, :cx])
-        q3 = np.sum((green[cy:, cx:] < 22) & outside_disc[cy:, cx:])
-        q4 = np.sum((green[cy:, :cx] < 22) & outside_disc[cy:, :cx])
+        q1 = max(np.sum((green[:cy, cx:] < 22) & outside_disc[:cy, cx:]), np.sum((diff_dark[:cy, cx:] > 50) & outside_disc[:cy, cx:]))
+        q2 = max(np.sum((green[:cy, :cx] < 22) & outside_disc[:cy, :cx]), np.sum((diff_dark[:cy, :cx] > 50) & outside_disc[:cy, :cx]))
+        q3 = max(np.sum((green[cy:, cx:] < 22) & outside_disc[cy:, cx:]), np.sum((diff_dark[cy:, cx:] > 50) & outside_disc[cy:, cx:]))
+        q4 = max(np.sum((green[cy:, :cx] < 22) & outside_disc[cy:, :cx]), np.sum((diff_dark[cy:, :cx] > 50) & outside_disc[cy:, :cx]))
         quadrants_with_damage = sum(1 for q in [q1, q2, q3, q4] if q > 120)
 
         return {
@@ -212,8 +219,8 @@ class DiagnosticEngine:
         quadrants = feats["quadrants_with_damage"]
         
         # Lógica de calibración determinista de logits según biomarcadores
-        # Grado 4 (Proliferativa): Neovascularización en disco (>1400) o hemorragia masiva (>4500 px)
-        if disc_edges > 1400 or dark_px > 4500:
+        # Grado 4 (Proliferativa): Neovascularización en disco (>1400 con daño microvascular previo) o hemorragia vítrea masiva (>4500 px)
+        if ((dark_px > 250 or exud_px > 40) and disc_edges > 1400) or dark_px > 4500:
             raw_logits = np.array([0.05, 0.1, 0.2, 0.8, 5.8], dtype=np.float32)
             detected_biomarkers = f"Neovascularización papilar activa ({disc_edges} bordes) y hemorragia vítrea masiva ({dark_px} px)"
         # Grado 3 (Severa): Hemorragias extensas (>1200 px) o múltiples cuadrantes afectados (>=3)
