@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="es" class="h-full bg-slate-950 text-slate-100">
+<html lang="es" class="h-full bg-slate-50 text-slate-800">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OculoEdge • Triaje Oftalmológico Autónomo (Edge-AI & XAI)</title>
+  <title>OculoEdge • Estación Clínica de Triaje Retiniano (Edge-AI & XAI)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -11,7 +11,6 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <script>
     tailwind.config = {
-      darkMode: 'class',
       theme: {
         extend: {
           fontFamily: {
@@ -19,11 +18,14 @@
             mono: ['JetBrains Mono', 'monospace'],
           },
           colors: {
-            brand: {
+            clinical: {
               50: '#f0f9ff',
+              100: '#e0f2fe',
               500: '#0284c7',
               600: '#0369a1',
               700: '#075985',
+              800: '#0c4a6e',
+              900: '#082f49',
             }
           }
         }
@@ -31,295 +33,340 @@
     }
   </script>
   <style>
-    .glass {
-      background: rgba(15, 23, 42, 0.82);
-      backdrop-filter: blur(14px);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-    }
     .custom-scroll::-webkit-scrollbar {
       width: 5px;
       height: 5px;
     }
     .custom-scroll::-webkit-scrollbar-thumb {
-      background: #334155;
+      background: #cbd5e1;
       border-radius: 4px;
     }
     .custom-scroll::-webkit-scrollbar-track {
-      background: transparent;
+      background: #f1f5f9;
     }
     input[type=range] {
       accent-color: #0284c7;
     }
   </style>
 </head>
-<body class="h-full flex flex-col font-sans antialiased selection:bg-sky-500 selection:text-white">
+<body class="h-full flex flex-col font-sans antialiased bg-slate-100/70 text-slate-800">
 
-  <!-- ENCABEZADO INSTITUCIONAL -->
-  <header class="border-b border-slate-800 bg-slate-900/95 backdrop-blur sticky top-0 z-40">
+  <!-- BARRA DE NAVEGACIÓN INSTITUCIONAL DE GRADO CLÍNICO -->
+  <header class="bg-white border-b border-slate-200/90 sticky top-0 z-40 shadow-xs">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-      <div class="flex items-center space-x-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/25">
-          <i data-lucide="eye" class="w-6 h-6 text-white"></i>
+      
+      <!-- Identidad Institucional & Marca Médica -->
+      <div class="flex items-center space-x-3.5">
+        <div class="w-10 h-10 rounded-xl bg-clinical-600 flex items-center justify-center text-white shadow-sm ring-2 ring-clinical-100">
+          <i data-lucide="eye" class="w-5 h-5"></i>
         </div>
         <div>
           <div class="flex items-center space-x-2">
-            <h1 class="font-extrabold text-lg text-white tracking-tight">OculoEdge</h1>
-            <span class="text-[10px] px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 font-mono border border-sky-500/20 font-semibold">v1.1 • Edge-AI & XAI</span>
+            <h1 class="font-bold text-base text-slate-900 tracking-tight">OculoEdge</h1>
+            <span class="text-[10px] px-2 py-0.5 rounded-full bg-clinical-50 text-clinical-700 font-mono border border-clinical-200 font-medium">SaMD • Edge-AI & XAI</span>
           </div>
-          <p class="text-xs text-slate-400">Triaje de Retinopatía Diabética • Inferencia Local Offline</p>
+          <p class="text-xs text-slate-500 font-normal">Estación de Triaje Oftalmológico de Primer Nivel • Retinopatía Diabética</p>
         </div>
       </div>
 
+      <!-- Membrete Académico & Telemetría del Sistema -->
       <div class="flex items-center space-x-4">
         <div class="hidden md:flex flex-col text-right">
-          <span class="text-xs font-semibold text-slate-200">Universidad Tecnológica de Tehuacán</span>
-          <span class="text-[10px] text-slate-400">FEMECI Puebla 2026 • Modalidad Superior (Ingenierías)</span>
+          <span class="text-xs font-semibold text-slate-700">Universidad Tecnológica de Tehuacán</span>
+          <span class="text-[10px] text-slate-500">FEMECI Puebla 2026 • Modalidad Superior (Ingenierías)</span>
         </div>
-        <div class="h-8 w-px bg-slate-800 hidden md:block"></div>
-        <div id="systemHealthBadge" class="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span id="healthStatusText">Edge CPU Activo</span>
+        <div class="h-8 w-px bg-slate-200 hidden md:block"></div>
+        <div id="systemHealthBadge" class="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span id="healthStatusText">Inferencia Local Offline (CPU)</span>
         </div>
       </div>
+
     </div>
   </header>
 
-  <!-- CONTENEDOR PRINCIPAL -->
+  <!-- CONTENEDOR PRINCIPAL: FLUJO CLÍNICO EN 3 COLUMNAS -->
   <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 grid grid-cols-1 lg:grid-cols-12 gap-5">
 
-    <!-- PANEL IZQUIERDO: SELECCIÓN, CARGA Y PARÁMETROS CLÍNICOS (5 cols) -->
-    <section class="lg:col-span-5 flex flex-col space-y-4">
+    <!-- COLUMNA 1: EXPEDIENTE CLÍNICO & ENTRADA DE MUESTRA (4 cols) -->
+    <section class="lg:col-span-4 flex flex-col space-y-4">
       
-      <!-- 1. Casos Clínicos de Demostración (ICDR) -->
-      <div class="glass rounded-2xl p-4 shadow-xl border border-slate-800/80">
-        <div class="flex items-center justify-between mb-2.5">
-          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center space-x-2">
-            <i data-lucide="layers" class="w-4 h-4 text-sky-400"></i>
-            <span>Casos Clínicos de Referencia (ICDR)</span>
+      <!-- Tarjeta 1: Ficha de Identificación del Paciente (NOM-004-SSA3) -->
+      <div class="bg-white rounded-xl p-4 border border-slate-200/90 shadow-xs">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-2 mb-3">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center space-x-2">
+            <span class="w-5 h-5 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-[10px] font-bold">1</span>
+            <span>Ficha del Paciente (Expediente)</span>
           </h2>
-          <span class="text-[10px] text-slate-500 font-mono">1-Clic Demo</span>
+          <span class="text-[10px] text-slate-400 font-mono">NOM-004-SSA3</span>
         </div>
 
-        <div class="grid grid-cols-1 gap-2 custom-scroll max-h-52 overflow-y-auto pr-1" id="samplesList">
-          <!-- Inyectado dinámicamente vía JS -->
-        </div>
-      </div>
-
-      <!-- 2. Carga Externa o Captura Directa -->
-      <div class="glass rounded-2xl p-4 shadow-xl border border-slate-800/80 flex-1 flex flex-col justify-between">
-        <div>
-          <div class="flex items-center justify-between mb-2.5">
-            <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center space-x-2">
-              <i data-lucide="camera" class="w-4 h-4 text-sky-400"></i>
-              <span>Adquisición de Retinografía</span>
-            </h2>
-            <button id="btnOpenCamera" class="text-[11px] px-2.5 py-1 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/20 flex items-center space-x-1 transition-colors">
-              <i data-lucide="video" class="w-3.5 h-3.5"></i>
-              <span>Cámara / Retinoscopio</span>
-            </button>
-          </div>
-
-          <!-- Zona Drag & Drop -->
-          <div id="dropZone" class="border-2 border-dashed border-slate-700 hover:border-sky-500/60 transition-all rounded-xl p-4 text-center cursor-pointer bg-slate-900/40 group">
-            <input type="file" id="fileInput" accept="image/*" class="hidden">
-            <div class="w-10 h-10 mx-auto rounded-full bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-sky-400 group-hover:bg-sky-500/10 transition-colors mb-2">
-              <i data-lucide="upload" class="w-5 h-5"></i>
-            </div>
-            <p id="fileLabel" class="text-xs font-medium text-slate-300">Arrastra una imagen o <span class="text-sky-400 underline">haz clic para explorar</span></p>
-            <p class="text-[10px] text-slate-500 mt-0.5">Formatos: JPG, PNG, TIFF o DICOM (512x512 mín)</p>
-          </div>
-        </div>
-
-        <!-- 3. Parámetros del Paciente -->
-        <div class="mt-3 pt-3 border-t border-slate-800/90 space-y-2.5">
+        <div class="space-y-3">
           <div class="grid grid-cols-2 gap-2.5">
             <div>
-              <label class="block text-[11px] font-medium text-slate-400 mb-1">Nombre del Paciente</label>
-              <input type="text" id="patientName" value="Juan Martínez Pérez" class="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-sky-500 transition-colors">
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Nombre Completo</label>
+              <input type="text" id="patientName" value="Juan Martínez Pérez" class="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-clinical-500 focus:bg-white transition-colors">
             </div>
             <div>
-              <label class="block text-[11px] font-medium text-slate-400 mb-1">ID / Folio Expediente</label>
-              <input type="text" id="patientId" value="UTT-2026-F16" class="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-sky-500 transition-colors font-mono">
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Folio / Expediente</label>
+              <input type="text" id="patientId" value="UTT-2026-F16" class="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 font-mono focus:outline-none focus:ring-1 focus:ring-clinical-500 focus:bg-white transition-colors">
             </div>
           </div>
+
           <div class="grid grid-cols-2 gap-2.5">
             <div>
-              <label class="block text-[11px] font-medium text-slate-400 mb-1">Edad</label>
-              <input type="number" id="patientAge" value="58" min="1" max="120" class="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-sky-500 transition-colors font-mono">
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Edad (Años)</label>
+              <input type="number" id="patientAge" value="58" min="1" max="120" class="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 font-mono focus:outline-none focus:ring-1 focus:ring-clinical-500 focus:bg-white transition-colors">
             </div>
             <div>
-              <label class="block text-[11px] font-medium text-slate-400 mb-1">Lateralidad Ocular</label>
-              <select id="eyeSide" class="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-sky-500 transition-colors">
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Lateralidad Ocular</label>
+              <select id="eyeSide" class="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-clinical-500 focus:bg-white transition-colors">
                 <option value="OD">Ojo Derecho (OD)</option>
                 <option value="OI">Ojo Izquierdo (OI)</option>
               </select>
             </div>
           </div>
         </div>
+      </div>
 
-        <!-- Botón de Ejecución -->
-        <button id="btnDiagnose" class="mt-3 w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white text-xs font-bold uppercase tracking-wider shadow-lg shadow-sky-500/25 flex items-center justify-center space-x-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-          <i data-lucide="sparkles" class="w-4 h-4"></i>
-          <span id="btnDiagnoseText">Ejecutar Triaje y Diagnóstico</span>
+      <!-- Tarjeta 2: Casos Clínicos de Referencia (ICDR) -->
+      <div class="bg-white rounded-xl p-4 border border-slate-200/90 shadow-xs">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-2 mb-2.5">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center space-x-2">
+            <span class="w-5 h-5 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-[10px] font-bold">2</span>
+            <span>Casos Clínicos de Referencia</span>
+          </h2>
+          <span class="text-[10px] text-slate-400 font-mono">Guía ICDR</span>
+        </div>
+
+        <div class="grid grid-cols-1 gap-1.5 custom-scroll max-h-48 overflow-y-auto pr-1" id="samplesList">
+          <!-- Inyectado dinámicamente vía JS -->
+        </div>
+      </div>
+
+      <!-- Tarjeta 3: Adquisición de Retinografía Externa / Cámara -->
+      <div class="bg-white rounded-xl p-4 border border-slate-200/90 shadow-xs flex-1 flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2 mb-2.5">
+            <h2 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center space-x-2">
+              <span class="w-5 h-5 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-[10px] font-bold">3</span>
+              <span>Carga de Imagen Externa</span>
+            </h2>
+            <button id="btnOpenCamera" class="text-[11px] px-2.5 py-1 rounded-md bg-slate-50 hover:bg-slate-100 text-clinical-700 border border-slate-200 flex items-center space-x-1.5 transition-colors font-medium">
+              <i data-lucide="camera" class="w-3.5 h-3.5"></i>
+              <span>Retinoscopio USB</span>
+            </button>
+          </div>
+
+          <!-- Zona Drag & Drop Estilo Médico -->
+          <div id="dropZone" class="border-2 border-dashed border-slate-200 hover:border-clinical-400 transition-all rounded-xl p-4 text-center cursor-pointer bg-slate-50/50 hover:bg-slate-50 group">
+            <input type="file" id="fileInput" accept="image/*" class="hidden">
+            <div class="w-10 h-10 mx-auto rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500 group-hover:text-clinical-600 group-hover:border-clinical-300 transition-colors mb-2">
+              <i data-lucide="upload" class="w-4 h-4"></i>
+            </div>
+            <p id="fileLabel" class="text-xs font-semibold text-slate-700">Arrastra una retinografía o <span class="text-clinical-600 underline">haz clic para examinar</span></p>
+            <p class="text-[10px] text-slate-400 mt-0.5">Formatos: JPG, PNG, TIFF o DICOM (mín. 512x512)</p>
+          </div>
+        </div>
+
+        <!-- Botón de Ejecución Primario -->
+        <button id="btnDiagnose" class="mt-4 w-full py-2.5 px-4 rounded-lg bg-clinical-600 hover:bg-clinical-700 active:bg-clinical-800 text-white text-xs font-bold uppercase tracking-wider shadow-sm flex items-center justify-center space-x-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+          <i data-lucide="stethoscope" class="w-4 h-4"></i>
+          <span id="btnDiagnoseText">Ejecutar Diagnóstico y Triaje</span>
         </button>
       </div>
 
     </section>
 
-    <!-- PANEL DERECHO: RESULTADOS, MULTIVISTA Y EXPLICABILIDAD (7 cols) -->
-    <section class="lg:col-span-7 flex flex-col space-y-4">
+    <!-- COLUMNA 2: ESTACIÓN DE IMAGENOLOGÍA & VISOR CLÍNICO (4.5 cols) -->
+    <section class="lg:col-span-5 flex flex-col space-y-4">
 
-      <!-- 1. Banner Principal de Resultados -->
-      <div id="resultsBanner" class="glass rounded-2xl p-4 shadow-xl border border-slate-800">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <div class="flex items-center space-x-2 mb-1.5">
-              <span id="severityBadge" class="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Normal</span>
-              <span id="referralBadge" class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-300">No Referible</span>
-              <span id="hotspotCountBadge" class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-sky-500/10 text-sky-400 border border-sky-500/20">0 Focos</span>
-            </div>
-            <h3 id="diagTitle" class="text-lg font-extrabold text-white tracking-tight">Sin Retinopatía Diabética (ICDR 0)</h3>
-            <p id="urgencyText" class="text-xs text-slate-400 mt-0.5">Control oftalmológico anual preventivo recomendado.</p>
-          </div>
-
-          <div class="text-right sm:border-l sm:border-slate-800 sm:pl-4 flex-shrink-0">
-            <span class="text-[10px] text-slate-400 uppercase tracking-wider block font-semibold">Confianza de Triaje</span>
-            <span id="confValue" class="text-2xl font-mono font-black text-sky-400">98.6%</span>
-            <span id="latencyTag" class="text-[10px] text-slate-500 block font-mono">Latencia Edge: 138 ms</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- 2. Visualizador Multivista Interactivo con Canvas Blending -->
-      <div class="glass rounded-2xl p-4 shadow-xl border border-slate-800 flex-1 flex flex-col">
-        <!-- Pestañas de Modo y Descarga -->
-        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5 mb-3">
-          <div class="flex space-x-1.5">
-            <button onclick="setViewMode('gradcam')" id="tabGradcam" class="px-3 py-1 rounded-lg text-xs font-semibold bg-sky-500/20 text-sky-300 border border-sky-500/30 transition-all flex items-center space-x-1.5">
-              <i data-lucide="flame" class="w-3.5 h-3.5 text-amber-400"></i>
+      <div class="bg-white rounded-xl p-4 border border-slate-200/90 shadow-xs flex-1 flex flex-col">
+        
+        <!-- Barra de Herramientas de Visualización Médica -->
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5 mb-3">
+          <div class="flex space-x-1">
+            <button onclick="setViewMode('gradcam')" id="tabGradcam" class="px-2.5 py-1 rounded-md text-xs font-semibold bg-clinical-50 text-clinical-700 border border-clinical-200 transition-all flex items-center space-x-1.5">
+              <i data-lucide="activity" class="w-3.5 h-3.5 text-clinical-600"></i>
               <span>Grad-CAM (XAI)</span>
             </button>
-            <button onclick="setViewMode('ben_graham')" id="tabBenGraham" class="px-3 py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all flex items-center space-x-1.5">
-              <i data-lucide="filter" class="w-3.5 h-3.5 text-indigo-400"></i>
+            <button onclick="setViewMode('ben_graham')" id="tabBenGraham" class="px-2.5 py-1 rounded-md text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all flex items-center space-x-1.5 border border-transparent">
+              <i data-lucide="filter" class="w-3.5 h-3.5 text-slate-400"></i>
               <span>Filtro Ben Graham</span>
             </button>
-            <button onclick="setViewMode('original')" id="tabOriginal" class="px-3 py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all flex items-center space-x-1.5">
-              <i data-lucide="image" class="w-3.5 h-3.5 text-emerald-400"></i>
+            <button onclick="setViewMode('original')" id="tabOriginal" class="px-2.5 py-1 rounded-md text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all flex items-center space-x-1.5 border border-transparent">
+              <i data-lucide="image" class="w-3.5 h-3.5 text-slate-400"></i>
               <span>Original</span>
             </button>
           </div>
 
-          <button id="btnDownloadReport" class="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium flex items-center space-x-1.5 border border-slate-700 transition-colors">
-            <i data-lucide="file-text" class="w-3.5 h-3.5 text-sky-400"></i>
-            <span id="btnReportText">Descargar PDF Oficial</span>
-          </button>
+          <div class="flex items-center space-x-1.5">
+            <span id="hotspotCountBadge" class="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-100 text-slate-700 border border-slate-200">0 Focos</span>
+          </div>
         </div>
 
-        <!-- Área de Visualización (Canvas para Grad-CAM interactivo / Imagen directa) -->
-        <div class="relative flex-1 min-h-[310px] bg-slate-950/80 rounded-xl border border-slate-800 flex items-center justify-center overflow-hidden">
+        <!-- Marco Neutral Oftalmológico (Gris Oscuro para Contraste Óptico) -->
+        <div class="relative flex-1 min-h-[320px] bg-slate-950 rounded-lg border border-slate-800 flex items-center justify-center overflow-hidden">
           
-          <!-- Canvas para Blending en tiempo real de Grad-CAM -->
-          <canvas id="blendCanvas" width="384" height="384" class="max-h-[300px] max-w-full rounded-lg object-contain shadow-2xl transition-opacity"></canvas>
+          <!-- Canvas para Blending Interactivo a 60 FPS -->
+          <canvas id="blendCanvas" width="384" height="384" class="max-h-[300px] max-w-full rounded object-contain transition-opacity"></canvas>
           
           <!-- Imagen directa para Ben Graham / Original -->
-          <img id="staticImg" src="" alt="Vista Retiniana" class="hidden max-h-[300px] max-w-full rounded-lg object-contain shadow-2xl">
+          <img id="staticImg" src="" alt="Vista Retiniana" class="hidden max-h-[300px] max-w-full rounded object-contain">
 
-          <!-- Indicador de carga / Placeholder inicial -->
-          <div id="loadingOverlay" class="hidden absolute inset-0 bg-slate-950/85 backdrop-blur flex flex-col items-center justify-center space-y-3 z-20">
-            <div class="w-10 h-10 border-4 border-sky-500/30 border-t-sky-400 rounded-full animate-spin"></div>
-            <div id="loadingStepText" class="text-xs font-mono text-sky-400 animate-pulse">Procesando imagen con Edge AI...</div>
+          <!-- Overlay de Carga -->
+          <div id="loadingOverlay" class="hidden absolute inset-0 bg-white/90 backdrop-blur-xs flex flex-col items-center justify-center space-y-3 z-20">
+            <div class="w-9 h-9 border-3 border-clinical-200 border-t-clinical-600 rounded-full animate-spin"></div>
+            <div id="loadingStepText" class="text-xs font-mono text-slate-700">Analizando biomarcadores retinianos...</div>
           </div>
 
-          <div id="imgPlaceholder" class="flex flex-col items-center text-slate-500 space-y-2">
-            <i data-lucide="scan" class="w-10 h-10 stroke-1 animate-pulse"></i>
-            <span class="text-xs">Selecciona un caso o carga una imagen para comenzar</span>
+          <!-- Placeholder inicial -->
+          <div id="imgPlaceholder" class="flex flex-col items-center text-slate-400 space-y-2">
+            <i data-lucide="scan" class="w-9 h-9 stroke-1 text-slate-500"></i>
+            <span class="text-xs text-slate-400 font-medium">Seleccione un caso o cargue una imagen para iniciar</span>
           </div>
 
-          <div id="viewModeBadge" class="absolute bottom-2.5 left-2.5 px-2.5 py-1 rounded-md bg-slate-900/90 backdrop-blur border border-slate-700 text-[10px] font-mono text-slate-300">
+          <!-- Insignia del Modo Activo -->
+          <div id="viewModeBadge" class="absolute bottom-2.5 left-2.5 px-2.5 py-1 rounded bg-slate-900/90 border border-slate-700 text-[10px] font-mono text-slate-300">
             Modo: Grad-CAM
           </div>
         </div>
 
-        <!-- Control de Opacidad del Mapa Grad-CAM -->
-        <div id="sliderContainer" class="mt-2.5 px-3 py-2 rounded-xl bg-slate-900/60 border border-slate-800/80 flex items-center justify-between space-x-3">
-          <div class="flex items-center space-x-2 text-xs text-slate-400 whitespace-nowrap">
-            <i data-lucide="sliders" class="w-3.5 h-3.5 text-sky-400"></i>
-            <span>Opacidad XAI:</span>
-            <span id="opacityLabel" class="font-mono font-bold text-sky-400">55%</span>
+        <!-- Control Deslizante de Opacidad XAI -->
+        <div id="sliderContainer" class="mt-3 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between space-x-3">
+          <div class="flex items-center space-x-2 text-xs text-slate-600 whitespace-nowrap">
+            <i data-lucide="sliders" class="w-3.5 h-3.5 text-clinical-600"></i>
+            <span class="font-medium">Opacidad XAI:</span>
+            <span id="opacityLabel" class="font-mono font-bold text-clinical-700">55%</span>
           </div>
-          <input type="range" id="opacitySlider" min="0" max="100" value="55" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer">
-          <span class="text-[10px] text-slate-500 font-mono hidden sm:inline">Original &harr; Térmico</span>
+          <input type="range" id="opacitySlider" min="0" max="100" value="55" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer">
+          <span class="text-[10px] text-slate-400 font-mono hidden sm:inline">Anatomía &harr; Mapa Térmico</span>
         </div>
 
-        <!-- 3. Panel de Biomarcadores Cuantitativos Extraídos -->
-        <div class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center" id="biomarkersGrid">
-          <div class="p-2 rounded-xl bg-slate-900/50 border border-slate-800">
-            <span class="text-[9px] text-slate-400 uppercase tracking-wider block">Microaneurismas</span>
-            <span id="bmDarkPx" class="text-sm font-mono font-bold text-slate-200">0 px</span>
-            <span class="text-[8px] text-slate-500 block">Lesiones oscuras</span>
-          </div>
-          <div class="p-2 rounded-xl bg-slate-900/50 border border-slate-800">
-            <span class="text-[9px] text-slate-400 uppercase tracking-wider block">Exudados Duros</span>
-            <span id="bmExudPx" class="text-sm font-mono font-bold text-amber-300">0 px</span>
-            <span class="text-[8px] text-slate-500 block">Depósitos lipídicos</span>
-          </div>
-          <div class="p-2 rounded-xl bg-slate-900/50 border border-slate-800">
-            <span class="text-[9px] text-slate-400 uppercase tracking-wider block">Bordes Papilares</span>
-            <span id="bmEdges" class="text-sm font-mono font-bold text-sky-300">0</span>
-            <span class="text-[8px] text-slate-500 block">Complejidad vascular</span>
-          </div>
-          <div class="p-2 rounded-xl bg-slate-900/50 border border-slate-800">
-            <span class="text-[9px] text-slate-400 uppercase tracking-wider block">Cuadrantes Afectados</span>
-            <span id="bmQuadrants" class="text-sm font-mono font-bold text-rose-300">0 / 4</span>
-            <span class="text-[8px] text-slate-500 block">Regla 4-2-1</span>
-          </div>
+        <!-- Hallazgos Patológicos Detectados -->
+        <div class="mt-3 p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs">
+          <span class="font-semibold text-slate-800 block mb-1 flex items-center space-x-1.5">
+            <i data-lucide="microscope" class="w-3.5 h-3.5 text-clinical-600"></i>
+            <span>Hallazgos Clínicos Computarizados:</span>
+          </span>
+          <p id="clinicalFindingsText" class="text-slate-600 text-[11px] leading-relaxed">Fondo de ojo íntegro sin microaneurismas ni lesiones vasculares patológicas.</p>
         </div>
 
-        <!-- 4. Distribución de Probabilidades por Grado ICDR -->
-        <div class="mt-3 pt-2.5 border-t border-slate-800">
-          <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1.5">Distribución de Probabilidades ICDR</span>
-          <div class="grid grid-cols-5 gap-1.5" id="probBars">
-            <!-- Barras generadas dinámicamente -->
-          </div>
+      </div>
+
+    </section>
+
+    <!-- COLUMNA 3: DICTAMEN DE TRIAJE & CONDUCTA MÉDICA (3.5 cols) -->
+    <section class="lg:col-span-3 flex flex-col space-y-4">
+
+      <!-- Tarjeta 1: Dictamen Diagnóstico & Semáforo de Referencia -->
+      <div id="resultsBanner" class="bg-white rounded-xl p-4 border border-slate-200/90 shadow-xs">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-2 mb-3">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 font-mono">Dictamen Clínico (ICDR)</span>
+          <span id="latencyTag" class="text-[10px] text-slate-400 font-mono">Latencia: 142 ms</span>
         </div>
 
-        <!-- 5. Hallazgos Clínicos Detallados -->
-        <div class="mt-2.5 p-2.5 rounded-xl bg-slate-900/40 border border-slate-800/80 text-xs">
-          <span class="font-semibold text-slate-300 block mb-0.5">Hallazgos Clínicos Computarizados:</span>
-          <p id="clinicalFindingsText" class="text-slate-400 text-[11px] leading-relaxed">Fondo de ojo íntegro sin microaneurismas ni hemorragias patológicas.</p>
+        <div class="space-y-2.5">
+          <!-- Insignias de Triaje -->
+          <div class="flex flex-wrap items-center gap-1.5">
+            <span id="severityBadge" class="px-2.5 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">Normal</span>
+            <span id="referralBadge" class="px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">No Referible</span>
+          </div>
+
+          <div>
+            <h3 id="diagTitle" class="text-base font-extrabold text-slate-900 tracking-tight leading-snug">Sin Retinopatía Diabética (ICDR 0)</h3>
+            <p id="urgencyText" class="text-xs text-slate-600 mt-1 leading-normal">Control oftalmológico anual preventivo recomendado.</p>
+          </div>
+
+          <div class="pt-2 border-t border-slate-100 flex items-center justify-between">
+            <span class="text-xs text-slate-500 font-medium">Confianza Diagnóstica:</span>
+            <span id="confValue" class="text-xl font-mono font-black text-clinical-700">98.6%</span>
+          </div>
         </div>
+      </div>
+
+      <!-- Tarjeta 2: Biomarcadores Cuantitativos Extraídos -->
+      <div class="bg-white rounded-xl p-4 border border-slate-200/90 shadow-xs">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-2 mb-2.5">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500 font-mono">Biomarcadores Extraídos</span>
+          <i data-lucide="clipboard-list" class="w-3.5 h-3.5 text-slate-400"></i>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 text-center" id="biomarkersGrid">
+          <div class="p-2 rounded-lg bg-slate-50 border border-slate-200/80">
+            <span class="text-[9px] text-slate-500 uppercase tracking-wider block">Microaneurismas</span>
+            <span id="bmDarkPx" class="text-sm font-mono font-bold text-slate-900">0 px</span>
+            <span class="text-[8px] text-slate-400 block">Lesiones oscuras</span>
+          </div>
+          <div class="p-2 rounded-lg bg-slate-50 border border-slate-200/80">
+            <span class="text-[9px] text-slate-500 uppercase tracking-wider block">Exudados Duros</span>
+            <span id="bmExudPx" class="text-sm font-mono font-bold text-amber-700">0 px</span>
+            <span class="text-[8px] text-slate-400 block">Depósitos lipídicos</span>
+          </div>
+          <div class="p-2 rounded-lg bg-slate-50 border border-slate-200/80">
+            <span class="text-[9px] text-slate-500 uppercase tracking-wider block">Bordes Papilares</span>
+            <span id="bmEdges" class="text-sm font-mono font-bold text-clinical-700">0</span>
+            <span class="text-[8px] text-slate-400 block">Complejidad vascular</span>
+          </div>
+          <div class="p-2 rounded-lg bg-slate-50 border border-slate-200/80">
+            <span class="text-[9px] text-slate-500 uppercase tracking-wider block">Cuadrantes</span>
+            <span id="bmQuadrants" class="text-sm font-mono font-bold text-rose-700">0 / 4</span>
+            <span class="text-[8px] text-slate-400 block">Regla 4-2-1</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tarjeta 3: Distribución Probabilística ICDR -->
+      <div class="bg-white rounded-xl p-4 border border-slate-200/90 shadow-xs">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-2 mb-2">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500 font-mono">Probabilidad por Grado</span>
+          <span class="text-[9px] text-slate-400 font-mono">ICDR 0 - 4</span>
+        </div>
+
+        <div class="grid grid-cols-5 gap-1.5" id="probBars">
+          <!-- Generado dinámicamente -->
+        </div>
+      </div>
+
+      <!-- Tarjeta 4: Botón de Exportación de Ficha Clínica Oficial (PDF) -->
+      <div class="bg-white rounded-xl p-4 border border-slate-200/90 shadow-xs">
+        <button id="btnDownloadReport" class="w-full py-2.5 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold flex items-center justify-center space-x-2 transition-colors shadow-xs">
+          <i data-lucide="file-down" class="w-4 h-4 text-clinical-400"></i>
+          <span id="btnReportText">Descargar Ficha Oficial (PDF con QR)</span>
+        </button>
+        <p class="text-[9px] text-slate-400 text-center mt-2 leading-tight">Documento clínico con firma criptográfica SHA-256 para expediente o derivación.</p>
       </div>
 
     </section>
 
   </main>
 
-  <!-- MODAL DE CAPTURA CON CÁMARA / RETINOSCOPIO -->
-  <div id="cameraModal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur flex items-center justify-center p-4">
-    <div class="glass max-w-lg w-full rounded-2xl p-5 border border-slate-700 shadow-2xl">
-      <div class="flex items-center justify-between mb-3">
-        <h3 class="text-sm font-bold text-white flex items-center space-x-2">
-          <i data-lucide="camera" class="w-4 h-4 text-sky-400"></i>
-          <span>Captura en Vivo (Cámara / Retinoscopio Portátil)</span>
+  <!-- MODAL DE ADQUISICIÓN CON RETINOSCOPIO / CÁMARA (CLÍNICO) -->
+  <div id="cameraModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white max-w-md w-full rounded-xl p-5 border border-slate-200 shadow-xl">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
+        <h3 class="text-sm font-bold text-slate-900 flex items-center space-x-2">
+          <i data-lucide="camera" class="w-4 h-4 text-clinical-600"></i>
+          <span>Adquisición en Vivo (Retinoscopio Digital)</span>
         </h3>
-        <button id="btnCloseCamera" class="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
-          <i data-lucide="x" class="w-5 h-5"></i>
+        <button id="btnCloseCamera" class="p-1 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+          <i data-lucide="x" class="w-4 h-4"></i>
         </button>
       </div>
 
-      <div class="relative rounded-xl overflow-hidden bg-black aspect-square flex items-center justify-center border border-slate-800">
+      <div class="relative rounded-lg overflow-hidden bg-black aspect-square flex items-center justify-center border border-slate-300">
         <video id="webcamVideo" autoplay playsinline class="w-full h-full object-cover"></video>
-        <div class="absolute inset-0 border-2 border-sky-500/40 pointer-events-none rounded-full m-8"></div>
-        <div class="absolute bottom-2 text-[10px] text-sky-400/80 font-mono bg-black/50 px-2 py-0.5 rounded">Alinee la pupila en el retículo central</div>
+        <div class="absolute inset-0 border-2 border-clinical-400/60 pointer-events-none rounded-full m-8"></div>
+        <div class="absolute bottom-2 text-[10px] text-white font-mono bg-black/60 px-2 py-0.5 rounded">Centre el fondo de ojo en el retículo</div>
       </div>
 
-      <div class="mt-4 flex space-x-3">
-        <button id="btnCaptureSnapshot" class="flex-1 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-white text-xs font-bold flex items-center justify-center space-x-2 transition-all shadow-lg shadow-sky-500/25">
+      <div class="mt-4 flex space-x-2.5">
+        <button id="btnCaptureSnapshot" class="flex-1 py-2 rounded-lg bg-clinical-600 hover:bg-clinical-700 text-white text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors">
           <i data-lucide="aperture" class="w-4 h-4"></i>
-          <span>Capturar y Analizar Retina</span>
+          <span>Capturar y Procesar Retina</span>
         </button>
-        <button id="btnCancelCamera" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors">
-          Cerrar
+        <button id="btnCancelCamera" class="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium transition-colors">
+          Cancelar
         </button>
       </div>
     </div>
@@ -359,10 +406,11 @@
         const res = await fetch('/api/health');
         if (res.ok) {
           const data = await res.json();
-          document.getElementById('healthStatusText').innerText = `Edge CPU (${data.device.toUpperCase()})`;
+          document.getElementById('healthStatusText').innerText = `Edge CPU (${data.device.toUpperCase()}) • Modelo Calibrado`;
         }
       } catch (err) {
-        document.getElementById('systemHealthBadge').className = 'flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-medium';
+        const badge = document.getElementById('systemHealthBadge');
+        badge.className = 'flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium';
         document.getElementById('healthStatusText').innerText = 'Servidor Desconectado';
       }
     }
@@ -378,23 +426,28 @@
         data.samples.forEach(sample => {
           const btn = document.createElement('button');
           const isSelected = (sample.id === selectedSampleId && customFileBlob === null);
-          btn.className = `w-full text-left p-2.5 rounded-xl border transition-all flex items-center justify-between ${
+          btn.className = `w-full text-left p-2 rounded-lg border transition-all flex items-center justify-between ${
             isSelected
-              ? 'bg-sky-500/15 border-sky-500/50 text-white shadow-md'
-              : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700 text-slate-300'
+              ? 'bg-clinical-50 border-clinical-300 text-clinical-900 shadow-xs'
+              : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
           }`;
           btn.onclick = () => selectSample(sample.id);
           btn.innerHTML = `
             <div class="flex items-center space-x-2.5 truncate">
-              <div class="w-7 h-7 rounded-lg bg-slate-800 flex items-center justify-center font-mono text-xs font-bold text-sky-400 border border-slate-700">
+              <div class="w-6 h-6 rounded bg-slate-100 flex items-center justify-center font-mono text-[11px] font-bold ${
+                sample.expected_grade === 0 ? 'text-emerald-700' :
+                sample.expected_grade === 1 ? 'text-clinical-700' :
+                sample.expected_grade === 2 ? 'text-amber-700' :
+                sample.expected_grade === 3 ? 'text-orange-700' : 'text-rose-700'
+              } border border-slate-200">
                 G${sample.expected_grade}
               </div>
               <div class="truncate">
-                <div class="text-xs font-semibold">${sample.title}</div>
+                <div class="text-xs font-semibold ${isSelected ? 'text-clinical-900' : 'text-slate-800'}">${sample.title}</div>
                 <div class="text-[10px] text-slate-400 truncate">${sample.subtitle}</div>
               </div>
             </div>
-            <i data-lucide="chevron-right" class="w-4 h-4 text-slate-500 flex-shrink-0"></i>
+            <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-slate-400 flex-shrink-0"></i>
           `;
           container.appendChild(btn);
         });
@@ -409,7 +462,7 @@
       selectedSampleId = id;
       customFileBlob = null;
       fileInput.value = '';
-      document.getElementById('fileLabel').innerHTML = 'Arrastra una imagen o <span class="text-sky-400 underline">haz clic para explorar</span>';
+      document.getElementById('fileLabel').innerHTML = 'Arrastra una retinografía o <span class="text-clinical-600 underline">haz clic para examinar</span>';
       loadSamples();
       runDiagnosis();
     }
@@ -418,7 +471,7 @@
     async function runDiagnosis() {
       btnDiagnose.disabled = true;
       loadingOverlay.classList.remove('hidden');
-      loadingStepText.innerText = '1. Preprocesando con filtro Ben Graham...';
+      loadingStepText.innerText = 'Preprocesamiento con filtro espectral Ben Graham...';
 
       const formData = new FormData();
       if (customFileBlob !== null) {
@@ -430,12 +483,12 @@
       }
 
       setTimeout(() => {
-        if (loadingStepText) loadingStepText.innerText = '2. Clasificando con MobileNetV3 + Biomarcadores...';
-      }, 150);
+        if (loadingStepText) loadingStepText.innerText = 'Evaluando red neuronal y biomarcadores...';
+      }, 140);
 
       setTimeout(() => {
-        if (loadingStepText) loadingStepText.innerText = '3. Computando mapa de gradientes Grad-CAM...';
-      }, 300);
+        if (loadingStepText) loadingStepText.innerText = 'Generando mapa de explicabilidad Grad-CAM...';
+      }, 280);
 
       try {
         const res = await fetch('/api/diagnose', {
@@ -459,7 +512,7 @@
       }
     }
 
-    // 5. Renderizado de resultados en la interfaz
+    // 5. Renderizado de resultados en la interfaz clínica
     function renderResults(data) {
       const pred = data.prediction;
       document.getElementById('imgPlaceholder').style.display = 'none';
@@ -474,23 +527,32 @@
       document.getElementById('diagTitle').innerText = pred.diagnosis;
       document.getElementById('urgencyText').innerText = pred.urgency;
       document.getElementById('confValue').innerText = `${pred.confidence_percentage}%`;
-      document.getElementById('latencyTag').innerText = `Latencia Edge: ${data.inference_time_ms} ms`;
+      document.getElementById('latencyTag').innerText = `Latencia: ${data.inference_time_ms} ms`;
       document.getElementById('clinicalFindingsText').innerText = pred.clinical_findings;
 
-      // Badges
+      // Badges con paleta clínica suave
       const sevBadge = document.getElementById('severityBadge');
       sevBadge.innerText = pred.severity;
-      sevBadge.style.backgroundColor = `${pred.badge_color}25`;
-      sevBadge.style.color = pred.badge_color;
-      sevBadge.style.borderColor = `${pred.badge_color}60`;
+      
+      if (pred.id === 0) {
+        sevBadge.className = 'px-2.5 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200';
+      } else if (pred.id === 1) {
+        sevBadge.className = 'px-2.5 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider bg-clinical-50 text-clinical-700 border border-clinical-200';
+      } else if (pred.id === 2) {
+        sevBadge.className = 'px-2.5 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200';
+      } else if (pred.id === 3) {
+        sevBadge.className = 'px-2.5 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider bg-orange-50 text-orange-700 border border-orange-200';
+      } else {
+        sevBadge.className = 'px-2.5 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200';
+      }
 
       const refBadge = document.getElementById('referralBadge');
       if (pred.referable) {
-        refBadge.innerText = 'REFERIBLE A OFTALMOLOGÍA';
-        refBadge.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30';
+        refBadge.innerText = 'REFERIR A OFTALMOLOGÍA';
+        refBadge.className = 'px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200';
       } else {
-        refBadge.innerText = 'NO REFERIBLE (SEGUIMIENTO ANUAL)';
-        refBadge.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+        refBadge.innerText = 'NO REFERIBLE (CONTROL ANUAL)';
+        refBadge.className = 'px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200';
       }
 
       // Hotspots
@@ -510,13 +572,18 @@
       pred.probabilities.forEach(p => {
         const isMax = p.class_id === pred.id;
         const div = document.createElement('div');
-        div.className = `p-1.5 rounded-lg text-center ${isMax ? 'bg-slate-800 border border-sky-500/50 shadow-md' : 'bg-slate-900/50 border border-slate-800'}`;
+        div.className = `p-1.5 rounded text-center ${isMax ? 'bg-clinical-50 border border-clinical-300' : 'bg-slate-50 border border-slate-200'}`;
         div.innerHTML = `
-          <div class="text-[9px] text-slate-400 font-mono">G${p.class_id}</div>
-          <div class="h-10 w-full bg-slate-950 rounded flex items-end my-1 overflow-hidden">
-            <div class="w-full transition-all duration-500" style="height: ${Math.max(p.percentage, 4)}%; background-color: ${p.color};"></div>
+          <div class="text-[9px] text-slate-500 font-mono">G${p.class_id}</div>
+          <div class="h-10 w-full bg-slate-200/80 rounded flex items-end my-1 overflow-hidden">
+            <div class="w-full transition-all duration-500" style="height: ${Math.max(p.percentage, 4)}%; background-color: ${
+              p.class_id === 0 ? '#059669' :
+              p.class_id === 1 ? '#0284c7' :
+              p.class_id === 2 ? '#d97706' :
+              p.class_id === 3 ? '#ea580c' : '#dc2626'
+            };"></div>
           </div>
-          <div class="text-[9px] font-bold font-mono ${isMax ? 'text-sky-300' : 'text-slate-300'}">${p.percentage}%</div>
+          <div class="text-[9px] font-bold font-mono ${isMax ? 'text-clinical-900' : 'text-slate-600'}">${p.percentage}%</div>
         `;
         probContainer.appendChild(div);
       });
@@ -552,7 +619,7 @@
       const badge = document.getElementById('viewModeBadge');
 
       ['tabGradcam', 'tabBenGraham', 'tabOriginal'].forEach(id => {
-        document.getElementById(id).className = 'px-3 py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all flex items-center space-x-1.5';
+        document.getElementById(id).className = 'px-2.5 py-1 rounded-md text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all flex items-center space-x-1.5 border border-transparent';
       });
 
       if (mode === 'gradcam') {
@@ -560,7 +627,7 @@
         staticImg.classList.add('hidden');
         sliderContainer.classList.remove('hidden');
         badge.innerText = 'Modo: Grad-CAM (Explicabilidad Térmica)';
-        document.getElementById('tabGradcam').className = 'px-3 py-1 rounded-lg text-xs font-semibold bg-sky-500/20 text-sky-300 border border-sky-500/30 transition-all flex items-center space-x-1.5';
+        document.getElementById('tabGradcam').className = 'px-2.5 py-1 rounded-md text-xs font-semibold bg-clinical-50 text-clinical-700 border border-clinical-200 transition-all flex items-center space-x-1.5';
         updateCanvasBlend();
       } else if (mode === 'ben_graham') {
         canvas.classList.add('hidden');
@@ -568,14 +635,14 @@
         sliderContainer.classList.add('hidden');
         staticImg.src = currentImages.ben_graham_b64 || '';
         badge.innerText = 'Modo: Filtro Ben Graham (Sustracción Gaussiana)';
-        document.getElementById('tabBenGraham').className = 'px-3 py-1 rounded-lg text-xs font-semibold bg-sky-500/20 text-sky-300 border border-sky-500/30 transition-all flex items-center space-x-1.5';
+        document.getElementById('tabBenGraham').className = 'px-2.5 py-1 rounded-md text-xs font-semibold bg-clinical-50 text-clinical-700 border border-clinical-200 transition-all flex items-center space-x-1.5';
       } else {
         canvas.classList.add('hidden');
         staticImg.classList.remove('hidden');
         sliderContainer.classList.add('hidden');
         staticImg.src = currentImages.original_b64 || '';
         badge.innerText = 'Modo: Retinografía Original';
-        document.getElementById('tabOriginal').className = 'px-3 py-1 rounded-lg text-xs font-semibold bg-sky-500/20 text-sky-300 border border-sky-500/30 transition-all flex items-center space-x-1.5';
+        document.getElementById('tabOriginal').className = 'px-2.5 py-1 rounded-md text-xs font-semibold bg-clinical-50 text-clinical-700 border border-clinical-200 transition-all flex items-center space-x-1.5';
       }
     }
 
@@ -586,17 +653,17 @@
         const file = fileInput.files[0];
         customFileBlob = null;
         selectedSampleId = -1;
-        document.getElementById('fileLabel').innerHTML = `<span class="text-sky-400 font-semibold">${file.name}</span> (${(file.size / 1024).toFixed(1)} KB)`;
+        document.getElementById('fileLabel').innerHTML = `<span class="text-clinical-700 font-semibold">${file.name}</span> (${(file.size / 1024).toFixed(1)} KB)`;
         loadSamples();
         runDiagnosis();
       }
     };
 
-    dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add('border-sky-500'); };
-    dropZone.ondragleave = () => { dropZone.classList.remove('border-sky-500'); };
+    dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add('border-clinical-500', 'bg-clinical-50/50'); };
+    dropZone.ondragleave = () => { dropZone.classList.remove('border-clinical-500', 'bg-clinical-50/50'); };
     dropZone.ondrop = (e) => {
       e.preventDefault();
-      dropZone.classList.remove('border-sky-500');
+      dropZone.classList.remove('border-clinical-500', 'bg-clinical-50/50');
       if (e.dataTransfer.files.length > 0) {
         fileInput.files = e.dataTransfer.files;
         fileInput.onchange();
@@ -609,7 +676,7 @@
     document.getElementById('btnDownloadReport').onclick = async () => {
       const btnText = document.getElementById('btnReportText');
       const oldText = btnText.innerText;
-      btnText.innerText = 'Generando...';
+      btnText.innerText = 'Generando Ficha Oficial...';
 
       const formData = new FormData();
       formData.append('patient_name', document.getElementById('patientName').value);
@@ -641,7 +708,7 @@
           a.click();
           a.remove();
         } else {
-          alert('Error al generar informe PDF.');
+          alert('Error al generar la ficha clínica en PDF.');
         }
       } catch (err) {
         console.error('Error generando reporte:', err);
@@ -664,7 +731,7 @@
         lucide.createIcons();
       } catch (err) {
         console.warn('Acceso a cámara denegado o no disponible:', err);
-        alert('No se detectó cámara web o el permiso fue denegado. Puede continuar usando la selección de archivos o los casos de referencia.');
+        alert('No se detectó retinoscopio o cámara web conectada. Puede continuar examinando archivos de fondo de ojo o los casos de referencia.');
       }
     };
 
@@ -690,7 +757,7 @@
         customFileBlob = blob;
         selectedSampleId = -1;
         fileInput.value = '';
-        document.getElementById('fileLabel').innerHTML = '<span class="text-sky-400 font-semibold">Fotograma Capturado en Vivo</span>';
+        document.getElementById('fileLabel').innerHTML = '<span class="text-clinical-700 font-semibold">Fotograma de Retinoscopio Capturado</span>';
         stopCamera();
         loadSamples();
         runDiagnosis();
@@ -701,7 +768,7 @@
     window.onload = () => {
       checkHealth();
       loadSamples();
-      setTimeout(runDiagnosis, 400);
+      setTimeout(runDiagnosis, 350);
     };
   </script>
 </body>
