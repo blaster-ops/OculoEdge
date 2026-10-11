@@ -1,284 +1,65 @@
-"""
-OculoEdge - Motor de Inferencia y Red Neuronal Calibrada (Edge AI)
-Combina el extractor de características MobileNetV3 con un motor de biomarcadores
-oftalmológicos para emitir diagnósticos clínicamente exactos según la escala ICDR.
-"""
-
+"""Offline research engine. Heuristics and trained CNNs have distinct provenance."""
 import os
-import cv2
-import torch
-import torch.nn as nn
-import torchvision.models as models
-import torchvision.transforms as transforms
+from pathlib import Path
 import numpy as np
-from typing import Dict, Any, Tuple, Optional, List
+from core.biomarkers import extract_retina_biomarkers, classify_features
 from core.preprocessor import enhance_retina_image
+from core.quality import assess_image_quality
 
-# Definición oficial de la escala clínica internacional ICDR
-ICDR_CLASSES = {
-    0: {
-        "id": 0,
-        "name": "Sin Retinopatía Diabética (Normal)",
-        "english": "No DR",
-        "severity": "Normal",
-        "color": "#10B981",  # Verde esmeralda
-        "urgency": "Ninguna",
-        "referral": False,
-        "clinical_findings": "Fondo de ojo íntegro sin microaneurismas ni hemorragias. Vasos retinianos y mácula preservados.",
-        "recommendation": "Control oftalmológico anual de rutina y control glucémico estricto (HbA1c < 7%)."
-    },
-    1: {
-        "id": 1,
-        "name": "Retinopatía Diabética Leve (NPDR Leve)",
-        "english": "Mild NPDR",
-        "severity": "Leve",
-        "color": "#3B82F6",  # Azul
-        "urgency": "Baja",
-        "referral": False,
-        "clinical_findings": "Presencia aislada de microaneurismas retinianos puntiformes sin edema macular detectable.",
-        "recommendation": "Reevaluación de fondo de ojo en 6 a 12 meses. Optimización de presión arterial y glucosa."
-    },
-    2: {
-        "id": 2,
-        "name": "Retinopatía Diabética Moderada (NPDR Moderada)",
-        "english": "Moderate NPDR",
-        "severity": "Moderada",
-        "color": "#F59E0B",  # Ámbar
-        "urgency": "Media",
-        "referral": True,
-        "clinical_findings": "Microaneurismas múltiples con exudados duros (depósitos lipídicos) y/o hemorragias intrarretinianas leves.",
-        "recommendation": "Derivación a Oftalmología en 3 a 6 meses. Evaluación de mácula mediante OCT."
-    },
-    3: {
-        "id": 3,
-        "name": "Retinopatía Diabética Severa (NPDR Severa)",
-        "english": "Severe NPDR",
-        "severity": "Severa",
-        "color": "#EF4444",  # Rojo
-        "urgency": "Alta (Prioritaria < 30 días)",
-        "referral": True,
-        "clinical_findings": "Regla 4-2-1 positiva: Hemorragias retinianas prominentes en múltiples cuadrantes y manchas algodonosas.",
-        "recommendation": "Derivación prioritaria a Oftalmología/Retinología en menos de 30 días para panfotocoagulación o anti-VEGF."
-    },
-    4: {
-        "id": 4,
-        "name": "Retinopatía Diabética Proliferativa (PDR)",
-        "english": "Proliferative DR",
-        "severity": "Crítica / Proliferativa",
-        "color": "#881337",  # Borgoña intenso / Alerta máxima
-        "urgency": "Urgencia Oftalmológica Inmediata (< 72 horas)",
-        "referral": True,
-        "clinical_findings": "Neovascularización sobre disco óptico o retina periférica (NVD/NVE) con riesgo inminente de hemorragia vítrea.",
-        "recommendation": "Derivación urgente inmediata (< 72 horas) a servicio de Retinología para tratamiento láser/quirúrgico."
-    }
-}
-
-
-class OculoEdgeNet(nn.Module):
-    """
-    Red Neuronal Convolucional compacta para Edge AI.
-    MobileNetV3-Large optimizada para inferencia en CPU local (< 150 ms).
-    """
-    def __init__(self, num_classes: int = 5):
-        super(OculoEdgeNet, self).__init__()
-        base_model = models.mobilenet_v3_large(weights=models.MobileNet_V3_Large_Weights.DEFAULT)
-        self.features = base_model.features
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        
-        in_features = base_model.classifier[0].in_features
-        self.classifier = nn.Sequential(
-            nn.Linear(in_features, 512),
-            nn.Hardswish(inplace=True),
-            nn.Dropout(p=0.2, inplace=True),
-            nn.Linear(512, 128),
-            nn.Hardswish(inplace=True),
-            nn.Linear(128, num_classes)
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.features(x)
-        x = self.avgpool(x)
-        x = torch.flatten(x, 1)
-        x = self.classifier(x)
-        return x
-
+VERSION = "2.0.0"
+NAMES = ["Sin signos en la demostración", "Patrón leve", "Patrón moderado", "Patrón severo", "Patrón proliferativo"]
+COLORS = ["#059669", "#0284c7", "#d97706", "#ea580c", "#be123c"]
+ICDR_CLASSES = {i: {"id": i, "name": NAMES[i], "severity": f"G{i}", "color": COLORS[i]} for i in range(5)}
+NOTICE = "Prototipo de investigación. Sin validación clínica; no emite diagnósticos ni decisiones de tratamiento."
 
 class DiagnosticEngine:
-    """Motor clínico de inferencia con calibración de biomarcadores."""
-    def __init__(self, weights_path: Optional[str] = None):
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = OculoEdgeNet(num_classes=5)
-        
-        # Ruta predeterminada de pesos calibrados
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        default_weights = os.path.join(base_dir, "weights", "oculoedge_calibrated.pth")
-        
-        if weights_path and os.path.exists(weights_path):
-            state = torch.load(weights_path, map_location=self.device)
-            self.model.load_state_dict(state)
-            print(f"[OculoEdge] Pesos cargados desde: {weights_path}")
-        elif os.path.exists(default_weights):
-            state = torch.load(default_weights, map_location=self.device)
-            self.model.load_state_dict(state)
-            print(f"[OculoEdge] Pesos calibrados cargados desde: {default_weights}")
-        else:
-            # Inicializar y guardar pesos calibrados iniciales
-            self._initialize_calibrated_weights(default_weights)
+    def __init__(self, weights_path=None, mode=None):
+        path = weights_path or os.environ.get("OCULOEDGE_MODEL")
+        self.mode = mode or ("neural" if path else "heuristic")
+        self.device = "cpu"
+        self.model = None
+        self.manifest = None
+        self.neural = None
+        if self.mode not in {"heuristic", "neural"}:
+            raise ValueError("Modo desconocido. Use heuristic o neural.")
+        if self.mode == "neural":
+            if not path:
+                raise ValueError("El modo neuronal requiere OCULOEDGE_MODEL o weights_path.")
+            from core.neural import NeuralPredictor
+            self.neural = NeuralPredictor(Path(path))
+            self.model = self.neural.model
+            self.manifest = self.neural.manifest
 
-        self.model.to(self.device)
-        self.model.eval()
+    def describe(self):
+        return {"mode": self.mode, "device": self.device, "clinically_validated": False,
+                "model_loaded": self.model is not None,
+                "model_id": self.manifest["sha256"] if self.manifest else "heuristic-v2",
+                "notice": NOTICE}
 
-        self.transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        ])
-
-    def _initialize_calibrated_weights(self, target_path: str):
-        """Inicializa los pesos de la cabeza clasificadora con una calibración ortogonal."""
-        with torch.no_grad():
-            nn.init.orthogonal_(self.model.classifier[-1].weight)
-            self.model.classifier[-1].bias.data.zero_()
-        os.makedirs(os.path.dirname(target_path), exist_ok=True)
-        torch.save(self.model.state_dict(), target_path)
-        print(f"[OculoEdge] Pesos calibrados inicializados en: {target_path}")
-
-    def _extract_clinical_features(self, image_np: np.ndarray) -> Dict[str, Any]:
-        """
-        Extrae y cuantifica biomarcadores anatómicos reales de la retina:
-        - Densidad de microaneurismas y hemorragias.
-        - Presencia de exudados lipídicos (espacio cromático).
-        - Densidad vascular y neovascularización en disco óptico.
-        """
-        h, w, _ = image_np.shape
-        green = image_np[:, :, 1]
-        
-        # 1. Máscara del campo visual del ojo
-        y, x = np.ogrid[:h, :w]
-        dist = np.sqrt((x - w // 2) ** 2 + (y - h // 2) ** 2)
-        in_eye = dist < (w * 0.44)
-        
-        # 2. Localizar Disco Óptico
-        blurred_g = cv2.GaussianBlur(green, (31, 31), 0)
-        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(blurred_g, mask=np.uint8(in_eye))
-        disc_center = max_loc
-        disc_radius = int(w * 0.15)
-        
-        disc_dist = np.sqrt((x - disc_center[0]) ** 2 + (y - disc_center[1]) ** 2)
-        in_disc = disc_dist < disc_radius
-        outside_disc = in_eye & (~in_disc)
-        
-        # 3. Exudados Duros (amarillo brillante / lipídicos fuera del disco)
-        exud_pixels = int(np.sum(
-            (((image_np[:, :, 0] > 180) & (image_np[:, :, 1] > 160) & (image_np[:, :, 0] > image_np[:, :, 2] + 40)) |
-             ((image_np[:, :, 0] > 220) & (image_np[:, :, 1] > 200) & (image_np[:, :, 2] < 155))) & outside_disc
-        ))
-        
-        # 4. Píxeles de hemorragia y lesiones oscuras (G < 22 o atenuación focal significativa)
-        diff_dark = blurred_g.astype(np.int32) - green.astype(np.int32)
-        dark_lesion_pixels = int(max(
-            np.sum((green < 22) & outside_disc),
-            np.sum((diff_dark > 50) & outside_disc)
-        ))
-        
-        # 5. Neovascularización en disco óptico (complejidad de bordes)
-        disc_img = green.copy()
-        disc_img[~in_disc] = 0
-        disc_edges = cv2.Canny(disc_img, 40, 100)
-        disc_edge_count = int(np.sum(disc_edges > 0))
-        
-        # 6. Cuadrantes afectados por hemorragias
-        cx, cy = w // 2, h // 2
-        q1 = max(np.sum((green[:cy, cx:] < 22) & outside_disc[:cy, cx:]), np.sum((diff_dark[:cy, cx:] > 50) & outside_disc[:cy, cx:]))
-        q2 = max(np.sum((green[:cy, :cx] < 22) & outside_disc[:cy, :cx]), np.sum((diff_dark[:cy, :cx] > 50) & outside_disc[:cy, :cx]))
-        q3 = max(np.sum((green[cy:, cx:] < 22) & outside_disc[cy:, cx:]), np.sum((diff_dark[cy:, cx:] > 50) & outside_disc[cy:, cx:]))
-        q4 = max(np.sum((green[cy:, :cx] < 22) & outside_disc[cy:, :cx]), np.sum((diff_dark[cy:, :cx] > 50) & outside_disc[cy:, :cx]))
-        quadrants_with_damage = sum(1 for q in [q1, q2, q3, q4] if q > 120)
-
-        return {
-            "dark_lesion_pixels": int(dark_lesion_pixels),
-            "exud_pixels": int(exud_pixels),
-            "disc_edge_count": disc_edge_count,
-            "quadrants_with_damage": quadrants_with_damage,
-            "disc_center": disc_center
-        }
-
-    def predict(self, image_np: np.ndarray) -> Dict[str, Any]:
-        """
-        Ejecuta el pipeline de diagnóstico clínico híbrido:
-        1. Preprocesamiento (recorte + filtro Ben Graham).
-        2. Extracción de características convolucionales profundas.
-        3. Análisis espectral de biomarcadores.
-        4. Fusión y calibración probabilística.
-        """
-        resized_orig, processed_bg = enhance_retina_image(image_np, target_size=(384, 384))
-        feats = self._extract_clinical_features(resized_orig)
-        
-        dark_px = feats["dark_lesion_pixels"]
-        exud_px = feats["exud_pixels"]
-        disc_edges = feats["disc_edge_count"]
-        quadrants = feats["quadrants_with_damage"]
-        
-        # Lógica de calibración determinista de logits según biomarcadores
-        # Grado 4 (Proliferativa): Neovascularización en disco (>1400 con daño microvascular previo) o hemorragia vítrea masiva (>4500 px)
-        if ((dark_px > 250 or exud_px > 40) and disc_edges > 1400) or dark_px > 4500:
-            raw_logits = np.array([0.05, 0.1, 0.2, 0.8, 5.8], dtype=np.float32)
-            detected_biomarkers = f"Neovascularización papilar activa ({disc_edges} bordes) y hemorragia vítrea masiva ({dark_px} px)"
-        # Grado 3 (Severa): Hemorragias extensas (>1200 px) o múltiples cuadrantes afectados (>=3)
-        elif quadrants >= 3 or dark_px > 1200:
-            raw_logits = np.array([0.05, 0.1, 0.4, 5.5, 0.4], dtype=np.float32)
-            detected_biomarkers = f"Regla 4-2-1 positiva: Hemorragias severas ({dark_px} px) en {quadrants} cuadrantes"
-        # Grado 2 (Moderada): Exudados duros lipídicos (>40 px) o hemorragias moderadas (>400 px)
-        elif exud_px > 40 or dark_px > 400:
-            raw_logits = np.array([0.1, 0.4, 5.6, 0.3, 0.1], dtype=np.float32)
-            detected_biomarkers = f"Exudados duros lipídicos ({exud_px} px) y microaneurismas/hemorragias moderadas ({dark_px} px)"
-        # Grado 1 (Leve): Microaneurismas aislados detectados (>230 px) sin exudados ni hemorragias extensas
-        elif dark_px > 230:
-            raw_logits = np.array([0.3, 5.3, 0.4, 0.1, 0.05], dtype=np.float32)
-            detected_biomarkers = f"Microaneurismas retinianos aislados ({dark_px} px) sin exudados ni edema"
-        # Grado 0 (Normal): Fondo de ojo íntegro (dark <= 230 px)
-        else:
-            raw_logits = np.array([5.8, 0.3, 0.1, 0.05, 0.02], dtype=np.float32)
-            detected_biomarkers = "Fondo de ojo íntegro sin microaneurismas, exudados ni hemorragias patológicas"
-
-        # Aplicar Softmax con temperatura clínica calibrada
-        exp_logits = np.exp(raw_logits - np.max(raw_logits))
-        probabilities = exp_logits / np.sum(exp_logits)
-        
-        pred_class_id = int(np.argmax(probabilities))
-        confidence = float(probabilities[pred_class_id])
-        
-        class_info = ICDR_CLASSES[pred_class_id]
-        is_referable = bool(pred_class_id >= 2)
-        
-        class_probs = []
-        for cid, info in ICDR_CLASSES.items():
-            class_probs.append({
-                "class_id": cid,
-                "name": info["name"],
-                "severity": info["severity"],
-                "color": info["color"],
-                "probability": float(probabilities[cid]),
-                "percentage": round(float(probabilities[cid]) * 100, 2)
-            })
-
-        return {
-            "prediction_id": pred_class_id,
-            "diagnosis": class_info["name"],
-            "severity": class_info["severity"],
-            "confidence": confidence,
-            "confidence_percentage": round(confidence * 100, 2),
-            "referable": is_referable,
-            "urgency": class_info["urgency"],
-            "badge_color": class_info["color"],
-            "clinical_findings": f"{class_info['clinical_findings']} | Biomarcadores: {detected_biomarkers}",
-            "recommendation": class_info["recommendation"],
-            "probabilities": class_probs,
-            "biomarker_metrics": {
-                "dark_lesion_pixels": dark_px,
-                "exudate_pixels": exud_px,
-                "disc_vascular_edges": disc_edges,
-                "quadrants_damaged": quadrants
-            },
-            "processed_image": processed_bg,
-            "original_resized": resized_orig
-        }
+    def predict(self, image_np):
+        quality = assess_image_quality(image_np)
+        original, processed = enhance_retina_image(image_np)
+        base = {"quality": quality, "engine": self.describe(), "processed_image": processed,
+                "original_resized": original, "confidence": None, "confidence_percentage": None,
+                "probabilities": [], "biomarker_metrics": {}, "evaluable": quality["evaluable"],
+                "referable": None, "notice": NOTICE}
+        if not quality["evaluable"]:
+            return dict(base, prediction_id=None, diagnosis="Imagen no evaluable", severity="No evaluable",
+                        urgency="Repetir adquisición", badge_color="#64748b",
+                        clinical_findings="; ".join(quality["reasons"]),
+                        recommendation="Use una retinografía en color, enfocada y con exposición adecuada.",
+                        explanation_mask=np.zeros((384, 384), dtype=np.uint8), decision_rule="quality_rejection")
+        features = extract_retina_biomarkers(original)
+        grade, rule, evidence = classify_features(features)
+        probabilities = []
+        if self.neural:
+            scores = self.neural.predict(processed)
+            grade = int(np.argmax(scores))
+            probabilities = [{"class_id": i, "name": NAMES[i], "probability": float(p),
+                              "percentage": round(float(p) * 100, 2)} for i, p in enumerate(scores)]
+            rule = "Salida de MobileNetV3 del checkpoint local; puntuaciones sin calibración clínica."
+        return dict(base, prediction_id=grade, diagnosis=f"G{grade} · {NAMES[grade]}", severity=f"G{grade}",
+                    badge_color=COLORS[grade], urgency="Revisión por un profesional",
+                    clinical_findings=rule, decision_rule=rule, probabilities=probabilities,
+                    recommendation="Resultado exploratorio. La valoración y canalización corresponden al profesional de salud.",
+                    biomarker_metrics=features["metrics"], explanation_mask=evidence)

@@ -1,253 +1,223 @@
-"""
-OculoEdge - Servidor de Aplicación Web y API de Inferencia Clínica
-Proporciona endpoints REST y sirve la interfaz gráfica para la demostración en vivo.
-"""
-
-import os
-import time
+"""Local-only offline research API with bounded uploads and immutable result snapshots."""
+import base64
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+import hashlib
 import io
-from typing import Optional
+import json
+import threading
+import time
+from pathlib import Path
+from uuid import uuid4
+import warnings
+
 import numpy as np
-from PIL import Image
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.responses import HTMLResponse, Response, FileResponse
+from PIL import Image, ImageOps, UnidentifiedImageError
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse, Response, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
-
-from core.preprocessor import enhance_retina_image, np_to_base64, base64_to_np
-from core.model_engine import DiagnosticEngine, ICDR_CLASSES
+from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
+from core.model_engine import DiagnosticEngine, VERSION
 from core.explainer import GradCAMExplainer
-from data.dataset_loader import get_available_samples, initialize_sample_dataset
+from core.preprocessor import np_to_base64
+from data.dataset_loader import get_available_samples
 from reports.triage_report import generate_pdf_report
+from reports.trust import load_key, sign_record, verify_record, sign_pdf
 
-# Directorios del sistema
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-STATIC_DIR = os.path.join(BASE_DIR, "static")
-SAMPLES_DIR = os.path.join(BASE_DIR, "data", "samples")
+ROOT = Path(__file__).resolve().parents[1]
+MAX_UPLOAD = 12 * 1024 * 1024
+MAX_PIXELS = 20_000_000
+MAX_ANALYSES = 16
+TTL_SECONDS = 20 * 60
 
-# Inicializar dataset de referencia si no existe
-initialize_sample_dataset(SAMPLES_DIR)
+class AnalysisStore:
+    def __init__(self):
+        self.items = OrderedDict()
+        self.lock = threading.Lock()
+    def put(self, analysis_id, data):
+        with self.lock:
+            self._prune()
+            self.items[analysis_id] = (time.monotonic(), data)
+            while len(self.items) > MAX_ANALYSES:
+                self.items.popitem(last=False)
+    def _prune(self):
+        expired = [k for k, (created, _) in self.items.items() if time.monotonic() - created > TTL_SECONDS]
+        for k in expired:
+            self.items.pop(k)
+    def get(self, analysis_id):
+        with self.lock:
+            self._prune()
+            if analysis_id not in self.items:
+                raise HTTPException(409, "El análisis expiró o el servidor se reinició. Vuelva a analizar la imagen.")
+            return self.items[analysis_id][1]
 
-# Inicializar motores de IA y Explicabilidad
-engine = DiagnosticEngine()
-explainer = GradCAMExplainer(engine)
+@asynccontextmanager
+async def lifespan(app):
+    app.state.engine = DiagnosticEngine()
+    app.state.explainer = GradCAMExplainer(app.state.engine)
+    app.state.store = AnalysisStore()
+    app.state.lock = threading.Lock()
+    app.state.key = load_key()
+    app.state.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="oculoedge-inference")
+    app.state.samples = get_available_samples(str(ROOT / "data/samples"))
+    yield
+    app.state.executor.shutdown(wait=True)
+    app.state.store.items.clear()
 
-app = FastAPI(
-    title="OculoEdge API",
-    description="Sistema de Triaje Oftalmológico con Edge AI y Explicabilidad Clínica (Grad-CAM)",
-    version="1.1.0"
-)
+app = FastAPI(title="OculoEdge · Investigación offline", version=VERSION, lifespan=lifespan)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
+@app.middleware("http")
+async def local_origin(request, call_next):
+    length = request.headers.get("content-length", "0") or "0"
+    if not length.isdigit():
+        return JSONResponse({"detail": "Content-Length inválido."}, status_code=400)
+    if int(length) > MAX_UPLOAD + 65536:
+        return JSONResponse({"detail": "La solicitud supera el límite de tamaño."}, status_code=413)
+    origin = request.headers.get("origin")
+    allowed = {f"http://localhost:{request.url.port or 80}", f"http://127.0.0.1:{request.url.port or 80}"}
+    if request.method == "POST" and origin and origin not in allowed:
+        return JSONResponse({"detail": "Origen no autorizado: use la interfaz local de OculoEdge."}, status_code=403)
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Cache-Control"] = "no-store" if request.url.path.startswith("/api/") else "no-cache"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'self'; media-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'"
+    return response
 
 @app.get("/")
-async def root():
-    index_path = os.path.join(STATIC_DIR, "index.html")
-    if os.path.exists(index_path):
-        return FileResponse(index_path)
-    return {"message": "OculoEdge Server Activo"}
-
+def root():
+    return FileResponse(ROOT / "static/index.html")
 
 @app.get("/api/health")
-async def health_check():
-    """Endpoint de verificación de estado y preparación del sistema."""
-    samples = get_available_samples(SAMPLES_DIR)
-    return {
-        "status": "healthy",
-        "system": "OculoEdge",
-        "version": "1.1.0",
-        "device": str(engine.device),
-        "model_loaded": engine.model is not None,
-        "samples_count": len(samples),
-        "competition": "FEMECI Puebla 2026",
-        "institution": "Universidad Tecnológica de Tehuacán"
-    }
-
+def health_check():
+    return {"status": "healthy", "system": "OculoEdge", "version": VERSION,
+            **app.state.engine.describe(), "samples_count": len(app.state.samples),
+            "offline_assets": True, "analysis_retention_minutes": TTL_SECONDS // 60}
 
 @app.get("/api/samples")
-async def list_samples():
-    """Devuelve las 5 muestras clínicas de referencia."""
-    samples = get_available_samples(SAMPLES_DIR)
-    results = []
-    for s in samples:
-        results.append({
-            "id": s["id"],
-            "title": s["title"],
-            "subtitle": s["subtitle"],
-            "expected_grade": s["expected_grade"],
-            "url": f"/api/samples/{s['filename']}"
-        })
-    return {"samples": results}
-
+def list_samples():
+    return {"samples": [{k: v for k, v in s.items() if k != "path"} |
+                        {"url": f"/api/samples/{s['filename']}"} for s in app.state.samples]}
 
 @app.get("/api/samples/{filename}")
-async def get_sample_file(filename: str):
-    file_path = os.path.join(SAMPLES_DIR, filename)
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Muestra no encontrada")
-    return FileResponse(file_path)
+def get_sample_file(filename: str):
+    sample = next((s for s in app.state.samples if s["filename"] == filename), None)
+    if sample is None:
+        raise HTTPException(404, "Muestra no encontrada.")
+    return FileResponse(sample["path"])
 
+def decode_image(contents):
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(contents)) as img:
+                if img.format not in {"JPEG", "PNG", "WEBP"}:
+                    raise ValueError("Use JPG, PNG o WebP.")
+                if img.width * img.height > MAX_PIXELS:
+                    raise ValueError("La imagen supera el límite de 20 megapíxeles.")
+                if getattr(img, "is_animated", False):
+                    raise ValueError("Use una imagen estática.")
+                return np.array(ImageOps.exif_transpose(img).convert("RGB"))
+    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
+        raise HTTPException(400, "Imagen inválida o demasiado grande. Use JPG, PNG o WebP de hasta 20 megapíxeles.") from exc
+
+def run_analysis(image, source, alpha):
+    start = time.perf_counter()
+    with app.state.lock:
+        pred = app.state.engine.predict(image)
+        cam = app.state.explainer.generate_heatmap(image, alpha=alpha, prediction=pred)
+    inference_ms = round((time.perf_counter() - start) * 1000, 2)
+    prediction = {k: v for k, v in pred.items() if k not in {"processed_image", "original_resized", "explanation_mask", "prediction_id"}}
+    prediction["id"] = pred["prediction_id"]
+    analysis_id = str(uuid4())
+    public = {"status": "success", "analysis_id": analysis_id,
+              "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+              "source": source, "inference_time_ms": inference_ms, "prediction": prediction,
+              "explicability": {k: v for k, v in cam.items() if not isinstance(v, np.ndarray)},
+              "images": {"original_b64": np_to_base64(pred["original_resized"]),
+                         "ben_graham_b64": np_to_base64(pred["processed_image"]),
+                         "heatmap_colored_b64": np_to_base64(cam["heatmap_colored_rgb"], format="PNG"),
+                         "evidence_mask_b64": np_to_base64(cam["raw_heatmap_uint8"], format="PNG"),
+                         "gradcam_overlay_b64": np_to_base64(cam["overlay_rgb"])}}
+    app.state.store.put(analysis_id, {"public": public, "pred": pred, "cam": cam,
+                                   "image_sha256": hashlib.sha256(image.tobytes()).hexdigest()})
+    return public
 
 @app.post("/api/diagnose")
-async def diagnose_image(
-    file: Optional[UploadFile] = File(None),
-    sample_id: Optional[str] = Form(None),
-    alpha: float = Form(0.55)
-):
-    """
-    Recibe una imagen retiniana (archivo subido o sample_id) y ejecuta el pipeline completo:
-    Preprocesamiento Ben Graham -> Inferencia Edge AI -> Explicabilidad Grad-CAM.
-    """
-    start_time = time.time()
-
-    # Normalizar sample_id si viene como string
-    parsed_sample_id: Optional[int] = None
-    if sample_id is not None and str(sample_id).strip() != "":
+async def diagnose_image(file: UploadFile | None = File(None), sample_id: int | None = Form(None),
+                         alpha: float = Form(.55, ge=0, le=1)):
+    if (file is None) == (sample_id is None):
+        raise HTTPException(400, "Seleccione una muestra o un archivo, únicamente uno.")
+    if file:
         try:
-            parsed_sample_id = int(sample_id)
-        except ValueError:
-            parsed_sample_id = None
-
-    if file is not None and file.filename and len(file.filename) > 0:
-        contents = await file.read()
-        if len(contents) == 0:
-            raise HTTPException(status_code=400, detail="El archivo subido está vacío.")
-        try:
-            pil_img = Image.open(io.BytesIO(contents)).convert("RGB")
-            image_np = np.array(pil_img)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Formato de imagen inválido: {str(e)}")
-    elif parsed_sample_id is not None and 0 <= parsed_sample_id <= 4:
-        samples = get_available_samples(SAMPLES_DIR)
-        sample_path = samples[parsed_sample_id]["path"]
-        pil_img = Image.open(sample_path).convert("RGB")
-        image_np = np.array(pil_img)
+            contents = await file.read(MAX_UPLOAD + 1)
+        finally:
+            await file.close()
+        if not contents:
+            raise HTTPException(400, "El archivo está vacío.")
+        if len(contents) > MAX_UPLOAD:
+            raise HTTPException(413, "El archivo supera 12 MB.")
+        image = await run_in_threadpool(decode_image, contents)
+        source = {"kind": "uploaded", "synthetic": False, "filename": Path(file.filename or "imagen").name[:120]}
     else:
-        raise HTTPException(status_code=400, detail="Debe proporcionar un archivo de imagen válido o un sample_id entre 0 y 4.")
+        if sample_id not in range(5):
+            raise HTTPException(400, "sample_id debe estar entre 0 y 4.")
+        s = app.state.samples[sample_id]
+        image = await run_in_threadpool(decode_image, Path(s["path"]).read_bytes())
+        source = {"kind": "synthetic_sample", "synthetic": True, "sample_id": sample_id, "expected_grade": sample_id}
+    import asyncio
+    return await asyncio.get_running_loop().run_in_executor(app.state.executor, run_analysis, image, source, alpha)
 
-    # 1. Inferencia diagnóstica híbrida
-    pred_result = engine.predict(image_np)
-
-    # 2. Generación del mapa Grad-CAM y capas térmicas
-    cam_result = explainer.generate_heatmap(
-        image_np,
-        target_class_id=pred_result["prediction_id"],
-        alpha=alpha
-    )
-
-    inference_time_ms = round((time.time() - start_time) * 1000, 1)
-
-    # 3. Codificar imágenes a Base64 para visualización instantánea y blending interactivo
-    b64_orig = np_to_base64(pred_result["original_resized"])
-    b64_ben_graham = np_to_base64(pred_result["processed_image"])
-    b64_heatmap_colored = np_to_base64(cam_result["heatmap_colored_rgb"])
-    b64_gradcam = np_to_base64(cam_result["overlay_rgb"])
-
-    return {
-        "status": "success",
-        "inference_time_ms": inference_time_ms,
-        "prediction": {
-            "id": pred_result["prediction_id"],
-            "diagnosis": pred_result["diagnosis"],
-            "severity": pred_result["severity"],
-            "confidence": pred_result["confidence"],
-            "confidence_percentage": pred_result["confidence_percentage"],
-            "referable": pred_result["referable"],
-            "urgency": pred_result["urgency"],
-            "badge_color": pred_result["badge_color"],
-            "clinical_findings": pred_result["clinical_findings"],
-            "recommendation": pred_result["recommendation"],
-            "probabilities": pred_result["probabilities"],
-            "biomarker_metrics": pred_result.get("biomarker_metrics", {})
-        },
-        "explicability": {
-            "hotspots_count": cam_result["hotspots_count"],
-            "hotspots": cam_result["hotspots"]
-        },
-        "images": {
-            "original_b64": b64_orig,
-            "ben_graham_b64": b64_ben_graham,
-            "heatmap_colored_b64": b64_heatmap_colored,
-            "gradcam_overlay_b64": b64_gradcam
-        }
-    }
-
+@app.get("/api/analysis/{analysis_id}")
+def analysis_record(analysis_id: str):
+    snapshot = app.state.store.get(analysis_id)
+    return {k: v for k, v in snapshot["public"].items() if k != "images"} | {"image_sha256": snapshot["image_sha256"]}
 
 @app.post("/api/report")
-async def generate_report(
-    patient_name: Optional[str] = Form("Paciente Anónimo"),
-    patient_id: Optional[str] = Form("UTT-2026-01"),
-    patient_age: Optional[str] = Form("50"),
-    eye_side: Optional[str] = Form("OD"),
-    sample_id: Optional[str] = Form(None),
-    file: Optional[UploadFile] = File(None)
-):
-    """Genera y descarga la ficha clínica de triaje en formato PDF estandarizado."""
-    # Sanitización de datos del paciente
-    name_clean = str(patient_name).strip() if patient_name and str(patient_name).strip() else "Paciente Anónimo"
-    id_clean = str(patient_id).strip() if patient_id and str(patient_id).strip() else "FOLIO-UTT-2026-01"
-    
+def generate_report(analysis_id: str = Form(...), patient_name: str = Form("Anónimo", max_length=120),
+                    patient_id: str = Form("DEMO", max_length=80), patient_age: int | None = Form(None, ge=0, le=120),
+                    eye_side: str = Form("OD")):
+    if eye_side not in {"OD", "OI"}:
+        raise HTTPException(422, "Seleccione OD u OI.")
+    snapshot = app.state.store.get(analysis_id)
+    public = snapshot["public"]
+    payload = {"version": VERSION, "analysis_id": analysis_id, "created_at": public["created_at"],
+               "report_created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+               "patient": {"name": patient_name.strip() or "Anónimo", "id": patient_id.strip() or "DEMO",
+                           "age": patient_age, "eye": eye_side}, "source": public["source"],
+               "prediction": public["prediction"], "image_sha256": snapshot["image_sha256"],
+               "explanation_sha256": hashlib.sha256(snapshot["cam"]["raw_heatmap_uint8"].tobytes()).hexdigest(),
+               "explanation_method": public["explicability"]["method"]}
+    record = sign_record(payload, app.state.key)
+    data = generate_pdf_report(patient_name, patient_id, patient_age, eye_side, snapshot["pred"],
+                               snapshot["pred"]["original_resized"], snapshot["cam"]["overlay_rgb"], record=record)
+    record["pdf_sha256"] = hashlib.sha256(data).hexdigest()
+    record["pdf_signature"] = sign_pdf(record["pdf_sha256"], app.state.key)
+    encoded = base64.b64encode(json.dumps(record, ensure_ascii=False).encode("utf-8")).decode("ascii")
+    return Response(data, media_type="application/pdf", headers={
+        "Content-Disposition": f'attachment; filename="OculoEdge_{analysis_id[:8]}_{eye_side}.pdf"',
+        "X-OculoEdge-Record": encoded})
+
+class VerificationRequest(BaseModel):
+    payload: dict
+    sha256: str = Field(max_length=64)
+    signature: str = Field(max_length=64)
+    scheme: str = Field(max_length=50)
+    pdf_sha256: str | None = Field(None, max_length=64)
+    pdf_signature: str | None = Field(None, max_length=64)
+
+@app.post("/api/verify")
+def verify(request: VerificationRequest):
+    data = request.model_dump(exclude_none=True)
+    if len(json.dumps(data)) > 16000:
+        raise HTTPException(413, "Registro demasiado grande.")
     try:
-        age_clean = int(str(patient_age).strip()) if patient_age and str(patient_age).strip() else 50
-    except (ValueError, TypeError):
-        age_clean = 50
+        valid = verify_record(data, app.state.key)
+    except (ValueError, TypeError, UnicodeError):
+        valid = False
+    return {"valid": valid, "scope": "Registro canónico y clave de este equipo; no certificación clínica."}
 
-    side_clean = str(eye_side).strip().upper() if eye_side and str(eye_side).strip() else "OD"
-    if side_clean not in ["OD", "OI"]:
-        side_clean = "OD"
-
-    parsed_sample_id: Optional[int] = None
-    if sample_id is not None and str(sample_id).strip() != "":
-        try:
-            parsed_sample_id = int(sample_id)
-        except ValueError:
-            parsed_sample_id = None
-
-    if file is not None and file.filename and len(file.filename) > 0:
-        contents = await file.read()
-        if len(contents) == 0:
-            raise HTTPException(status_code=400, detail="El archivo subido está vacío.")
-        try:
-            pil_img = Image.open(io.BytesIO(contents)).convert("RGB")
-            image_np = np.array(pil_img)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Formato de imagen inválido: {str(e)}")
-    elif parsed_sample_id is not None and 0 <= parsed_sample_id <= 4:
-        samples = get_available_samples(SAMPLES_DIR)
-        pil_img = Image.open(samples[parsed_sample_id]["path"]).convert("RGB")
-        image_np = np.array(pil_img)
-    else:
-        raise HTTPException(status_code=400, detail="Debe proporcionar una imagen o sample_id válido.")
-
-    # Diagnóstico y Grad-CAM
-    pred_result = engine.predict(image_np)
-    cam_result = explainer.generate_heatmap(image_np, target_class_id=pred_result["prediction_id"])
-
-    pdf_bytes = generate_pdf_report(
-        patient_name=name_clean,
-        patient_id=id_clean,
-        patient_age=age_clean,
-        eye_side=side_clean,
-        diagnosis_data=pred_result,
-        original_img_np=pred_result["processed_image"],
-        gradcam_img_np=cam_result["overlay_rgb"]
-    )
-
-    clean_filename = f"Reporte_OculoEdge_{id_clean}_{side_clean}.pdf".replace(" ", "_")
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{clean_filename}"'}
-    )
-
-
-# Montar archivos estáticos
-if os.path.exists(STATIC_DIR):
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
