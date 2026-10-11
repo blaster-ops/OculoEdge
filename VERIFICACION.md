@@ -30,4 +30,4 @@ El ZIP se descomprimió a una ruta diferente con espacios. Se comprobó que toda
 
 No hay datos clínicos etiquetados disponibles fuera del repositorio, según confirmó el equipo. No se entrega un clasificador clínicamente validado. No se certifica que cualquier fotografía sea retiniana o que pasar los controles básicos garantice calidad diagnóstica. No se ha probado esta versión en Linux ni en otro equipo Windows físico.
 
-La documentación preparada es contenido del proyecto para revisión; el asesor, la inscripción, los formularios oficiales y las firmas institucionales corresponden al equipo. No se han publicado los cambios en GitHub ni ejecutado el workflow remoto.
+La documentación preparada es contenido del proyecto para revisión; el asesor, la inscripción, los formularios oficiales y las firmas institucionales corresponden al equipo. Los cambios se conservan en la rama codex/concurso-funcional de GitHub para revisión. Las pruebas descritas aquí son locales; el estado del workflow remoto se consulta en GitHub Actions.
