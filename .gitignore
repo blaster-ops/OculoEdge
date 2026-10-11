@@ -24,3 +24,12 @@ reports/*.pdf
 
 # Logs
 *.log
+
+# Local state, private data and generated packages
+.local/
+dist/
+wheelhouse/
+output/
+tmp/
+data/private/
+weights/oculoedge_best.*

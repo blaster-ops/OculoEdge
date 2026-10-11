@@ -1,19 +1,41 @@
 {
-  "dataset_evaluation": "MESSIDOR-2 & EyePACS Retrospective Cohort",
-  "total_test_images": 1332,
-  "multiclass_accuracy": 0.892,
-  "binary_triage": {
-    "target": "Retinopatía Referible (ICDR 2+)",
-    "roc_auc": 0.964,
-    "sensitivity_recall": 0.952,
-    "specificity": 0.936,
-    "positive_predictive_value_precision": 0.925,
-    "f1_score": 0.938
+  "version": "2.0.0",
+  "created_at": "2026-10-11T16:23:27.783493+00:00",
+  "dataset_kind": "synthetic",
+  "dataset_manifest_sha256": null,
+  "clinical_validation": false,
+  "engine": {
+    "mode": "heuristic",
+    "device": "cpu",
+    "clinically_validated": false,
+    "model_loaded": false,
+    "model_id": "heuristic-v2",
+    "notice": "Prototipo de investigación. Sin validación clínica; no emite diagnósticos ni decisiones de tratamiento."
   },
-  "edge_efficiency": {
-    "model_size_mb": 18.4,
-    "quantized_tflite_mb": 4.8,
-    "avg_latency_cpu_ms": 142.6,
-    "inference_mode": "100% On-Device / Offline"
-  }
+  "total_images": 5,
+  "evaluable_images": 5,
+  "rejected_by_class": [
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "multiclass_accuracy_including_rejections": 1.0,
+  "binary_grade_2_plus": {
+    "tp": 3,
+    "fn": 0,
+    "tn": 2,
+    "fp": 0,
+    "sensitivity_including_rejections": 1.0,
+    "specificity_including_rejections": 1.0,
+    "accepted_only_auc": null,
+    "auc_note": "AUC requiere puntuaciones neuronales y ambas clases; se calcula solo sobre imágenes aceptadas."
+  },
+  "latency_prediction_only_ms": {
+    "median": 104.26430002553388,
+    "p95": 107.49947999138385,
+    "warmup_excluded": true
+  },
+  "notice": "Cinco muestras sintéticas comprueban integración; no estiman rendimiento clínico."
 }

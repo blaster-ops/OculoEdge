@@ -1,157 +1,110 @@
-# OculoEdge — Sistema de Triaje Oftalmológico Autónomo con Edge AI & XAI
+# OculoEdge 2.0
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python: 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688.svg)](https://fastapi.tiangolo.com/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-CPU%20Edge-EE4C2C.svg)](https://pytorch.org/)
-[![FEMECI Puebla 2026](https://img.shields.io/badge/FEMECI-Puebla%202026-8A2BE2.svg)](https://secihti-pue-dme.org)
+Estación local de investigación para procesamiento de retinografías y demostración de ingeniería. Universidad Tecnológica de Tehuacán · FEMECI Puebla 2026.
 
-**Feria Mexicana de Ciencias e Ingenierías • Capítulo Puebla 2026 (FEMECI-PUEBLA 2026)**  
-*Secretaría de Ciencia, Humanidades, Tecnología e Innovación del Estado de Puebla (SECIHTI)*  
-* **Institución:** Universidad Tecnológica de Tehuacán (UTT)  
-* **Nivel:** Superior  
-* **Área / Modalidad:** Ingenierías  
-* **Categoría:** Sistemas Informáticos y Computación  
+## Abrir la versión portable en Windows
 
----
+1. Descomprimir `OculoEdge_2_0_Concurso.zip` por completo en una carpeta local.
+2. Abrir `Iniciar_OculoEdge.bat` dentro de esa carpeta.
+3. Se abrirá `http://127.0.0.1:8050` en el navegador. Mantener la consola abierta; Ctrl+C detiene el servidor.
 
-## 👥 Equipo de Investigación y Desarrollo
+El paquete incluye Python para Windows x64 y todas las dependencias del modo de demostración. No necesita internet, Python instalado, administrador, GPU ni servicios en la nube. La cámara depende de permisos del navegador y del dispositivo físico; una cámara normal necesita óptica apropiada para adquirir fondo de ojo.
 
-* **José Miguel Tapia Adán** — Director de Proyecto / Líder de Arquitectura & ML
-* **Samuel Gutiérrez Tapia** — Investigador Clínico & Adquisición de Datos
-* **Oswaldo Yahir Asis Ladino** — Desarrollador de Software & Pruebas
-* **Asesor:** Por designar institucionalmente (Universidad Tecnológica de Tehuacán)
+## Qué está implementado
 
----
+- Interfaz con recursos locales, compatible con escritorio y pantallas pequeñas.
+- Carga JPG/PNG/WebP y captura desde cámara USB con selección de dispositivo.
+- Límites de 12 MB y 20 MP, corrección de orientación EXIF y controles de exposición, detalle, resolución y color.
+- Resultado «no evaluable» para entradas que no pasan los controles, sin grado ni confianza artificial.
+- Preprocesamiento Ben Graham y mediciones exploratorias con reglas transparentes.
+- Cinco muestras explícitamente sintéticas G0–G4 para demostración de integración.
+- Máscara de las regiones utilizadas por las reglas, con opacidad interactiva, vista original y filtro.
+- PDF del mismo análisis mostrado, JSON de verificación y exportación del análisis.
+- SHA-256 y HMAC-SHA256 para verificar localmente el registro y el PDF.
+- Retención limitada: hasta 16 análisis en memoria por 20 minutos; sin almacenamiento automático de imágenes de usuarios.
+- Entrenamiento, manifiesto de checkpoint, inferencia neuronal y Grad-CAM opcionales.
+- Evaluación calculada a partir de predicciones, exportación por imagen, detección de fuga por paciente y métricas con rechazos incluidos.
 
-## 👁️ Descripción del Proyecto
+## Alcance científico
 
-**OculoEdge** es un sistema de visión computacional y aprendizaje profundo en el borde (*Edge AI*) diseñado para realizar **triaje oftalmológico temprano, no invasivo y totalmente desconectado de internet (100% offline)** para la detección de retinopatía diabética en comunidades rurales y centros de salud de primer nivel en el Estado de Puebla.
+La versión portable usa **reglas experimentales de imagen**, no un modelo clínicamente validado. Los umbrales son de demostración y no implementan los criterios clínicos ICDR. No se emiten decisiones de tratamiento ni se descarta enfermedad. Las mediciones no equivalen a microaneurismas, edema o neovascularización confirmados.
 
-El sistema fusiona una red neuronal convolucional profunda optimizada (**MobileNetV3-Large**) con análisis cuantitativo de biomarcadores morfológicos y mapas de atención explicables (**Grad-CAM**), permitiendo que médicos generales y promotores de salud identifiquen a pacientes con riesgo inminente de pérdida visual y generen una derivación oportuna a oftalmología en menos de **360 ms**.
+La confianza clínica se muestra como no disponible. Los porcentajes de la red opcional son softmax sin calibración clínica. Los controles de adquisición no garantizan que una imagen sea retiniana ni que tenga calidad diagnóstica.
 
----
+El repositorio inicial incluía cifras simuladas atribuidas a MESSIDOR-2/EyePACS. Se reemplazaron con resultados reproducibles de las cinco muestras sintéticas. No hay evidencia disponible de validación con 1,332 imágenes reales. No se distribuye un checkpoint neuronal como entrenado clínicamente: el antiguo `weights/oculoedge_calibrated.pth` se conserva en Git para trazabilidad, no se carga automáticamente y carece del manifiesto requerido.
 
-## ✨ Características Principales
+## Instalar desde el código
 
-1. **Inferencia Local en el Borde (Edge Computing sin Internet):**
-   * Red **MobileNetV3-Large** calibrada con pesos compactos ($< 20\text{ MB}$).
-   * Latencia de inferencia promedio: **$138\text{ ms} - 350\text{ ms}$** en CPU estándar, sin requerir GPUs costosas ni conexión a la nube.
-   * Total privacidad y cumplimiento estricto de la LFPDPPP y bioética médica (los datos nunca salen del dispositivo).
+Entorno probado: Windows x64, Python 3.13. La ejecución base también está preparada para Linux con Python 3.11–3.13; requiere comprobar instalación en ese sistema.
 
-2. **Preprocesamiento Espectral de Ben Graham:**
-   * Recorte adaptativo del campo visual circular de la retina.
-   * Sustracción Gaussiana local ($I' = 4I - 4\text{GaussianBlur}(I) + 128$) para normalizar la variabilidad de iluminación y artefactos de cámaras de fondo de ojo.
-
-3. **Explicabilidad Clínica con Grad-CAM Interactivo:**
-   * Generación de mapas de calor termográficos ponderados por gradiente para las 5 clases de la escala internacional ICDR.
-   * **Visualizador en Tiempo Real con Canvas (60 FPS):** Control deslizante de opacidad ($0\%$ a $100\%$) para contrastar la imagen retiniana original contra el mapa térmico de lesiones subyacentes.
-
-4. **Extracción Automatizada de Biomarcadores Cuantitativos:**
-   * Microaneurismas y hemorragias retinianas (píxeles de atenuación vascular).
-   * Exudados duros lipídicos en espacio de color CIE-LAB (alerta de edema macular).
-   * Densidad de neovascularización en la papila óptica (NVD) y evaluación de la **Regla 4-2-1**.
-
-5. **Ficha Clínica Oficial en PDF con Código QR de Autenticidad:**
-   * Generación instantánea de reportes de telemedicina con ReportLab.
-   * Código QR con firma digital criptográfica **SHA-256** para trazabilidad de la consulta.
-
-6. **Adquisición en Vivo (Cámara / Retinoscopio Portátil):**
-   * Integración de WebRTC para captura directa con retinoscopios portátiles o cámaras periféricas con retículo de alineación pupilar.
-
----
-
-## 📊 Métricas de Validación Clínica
-
-* **Sensibilidad Global:** $95.2\%$
-* **Especificidad:** $96.8\%$
-* **Área Bajo la Curva ROC (AUC):** $0.964$
-* **Exactitud en Casos de Referencia ICDR:** $100\%$ ($G_0$ a $G_4$ con confianza $\ge 97.5\%$).
-
-Las gráficas científicas en alta definición ($300\text{ DPI}$) se encuentran en la carpeta [`benchmarks/`](benchmarks/):
-* [`benchmarks/confusion_matrix.png`](benchmarks/confusion_matrix.png) — Matriz de Confusión Multiclase.
-* [`benchmarks/roc_curve.png`](benchmarks/roc_curve.png) — Curva ROC Multiclase.
-
----
-
-## 📂 Estructura del Repositorio
-
-```text
-OculoEdge/
-├── app/
-│   └── server.py                   # Servidor FastAPI, endpoints REST (/api/health, /api/diagnose, /api/report)
-├── benchmarks/
-│   ├── evaluate_metrics.py         # Generador de curvas ROC y matrices de confusión
-│   ├── confusion_matrix.png        # Gráfica científica en alta resolución (300 DPI)
-│   ├── roc_curve.png               # Curva ROC multiclase (AUC = 0.964)
-│   └── metrics_summary.json        # Resumen JSON consolidado
-├── core/
-│   ├── preprocessor.py             # Filtro Ben Graham y recorte circular adaptativo
-│   ├── biomarkers.py               # Extracción morfológica de biomarcadores (microaneurismas, exudados, NVD)
-│   ├── model_engine.py             # Clasificador híbrido MobileNetV3 + escala ICDR
-│   ├── explainer.py                # Motor Grad-CAM y cálculo de hotspots lesionales
-│   └── train.py                    # Script de entrenamiento PyTorch con Focal Loss
-├── data/
-│   ├── dataset_loader.py           # Cargador y generador sintético calibrado
-│   └── samples/                    # 5 retinografías de referencia (Grados 0 a 4)
-├── protocolo/
-│   ├── Protocolo_OculoEdge_FEMECI_Puebla_2026.pdf # Protocolo técnico oficial de 20 páginas
-│   ├── Guia_Defensa_Jurado_OculoEdge.pdf          # Guion minuto a minuto y banco de preguntas para jurado
-│   ├── Resumen_Ejecutivo_F01_OculoEdge.pdf        # Formato oficial F-01
-│   ├── guia_disenio_cartel.md                     # Guía y textos para cartel de 90x120 cm
-│   └── bitacora_investigacion.md                  # Bitácora cronológica de investigación
-├── reports/
-│   └── triage_report.py            # Generador de ficha clínica PDF con QR criptográfico
-├── static/
-│   └── index.html                  # Interfaz web clínica interactiva con Canvas XAI y captura en vivo
-├── tests/
-│   └── test_pipeline.py            # Suite de pruebas automatizadas (5/5 tests unitarios)
-├── weights/
-│   └── oculoedge_calibrated.pth    # Pesos calibrados del modelo neuronal (14 MB)
-├── iniciar_oculoedge.sh            # Lanzador de 1-clic para laptop de demostración
-├── requirements.txt                # Dependencias del proyecto
-├── .gitignore
-└── README.md
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-lock.txt
+.\.venv\Scripts\python.exe run.py --check
+.\.venv\Scripts\python.exe run.py
 ```
 
----
+También puede abrir `Instalar_OculoEdge.bat` y luego `Iniciar_OculoEdge.bat`. La instalación desde código necesita internet; la versión portable incluye los recursos necesarios para ejecutar sin red. Si el puerto 8050 pertenece a otra aplicación, use `run.py --port 8051`. No se terminan procesos ajenos.
 
-## 🚀 Guía de Instalación y Ejecución
+Linux:
 
-### 1. Clonar el Repositorio
 ```bash
-git clone https://github.com/blaster-ops/OculoEdge.git
-cd OculoEdge
-```
-
-### 2. Crear y Activar Entorno Virtual
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
-
-### 3. Instalar Dependencias
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Ejecutar la Aplicación (1-Clic)
-```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-lock.txt
 ./iniciar_oculoedge.sh
 ```
-O directamente con Uvicorn:
-```bash
-uvicorn app.server:app --host 0.0.0.0 --port 8050
-```
-Abre tu navegador en: **[http://localhost:8050](http://localhost:8050)**
 
-### 5. Ejecutar la Suite de Pruebas Automatizadas
-```bash
-python -m unittest discover -s tests -v
+## Pruebas y evaluación de demostración
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe -m benchmarks.evaluate_metrics
 ```
 
----
+El benchmark genera `benchmarks/metrics_summary.json`, `predictions.json`, matriz de confusión y una figura que identifica ROC como no disponible para el motor de reglas. Cinco aciertos sintéticos prueban funcionamiento de esos casos; no prueban precisión clínica ni generalización.
 
-## 📜 Licencia
+## Entrenar un modelo con datos independientes
 
-Este proyecto está bajo la Licencia MIT. Desarrollado con fines de investigación científica y tecnológica para la **FEMECI Puebla 2026** por estudiantes de la **Universidad Tecnológica de Tehuacán**.
+Instalar el componente neuronal en el entorno de desarrollo, con internet durante esa preparación:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-ml.txt
+```
+
+Crear un CSV UTF-8 con rutas relativas al CSV y columnas:
+
+```csv
+path,label,patient_id,split
+images/ejemplo0.jpg,0,P001,train
+images/ejemplo1.jpg,1,P002,val
+images/ejemplo2.jpg,2,P003,test
+```
+
+Este fragmento ilustra el formato, no es un dataset suficiente. Se requieren las cinco clases en entrenamiento y una validación separada; ningún paciente ni archivo idéntico puede aparecer en distintas particiones. Usar identificadores desidentificados y conjuntos representativos autorizados. Separar también fuentes y equipos para estudiar generalización.
+
+```powershell
+.\.venv\Scripts\python.exe -m core.train --csv data/private/dataset.csv --epochs 15 --data-kind real
+.\.venv\Scripts\python.exe -m benchmarks.evaluate_metrics --csv data/private/dataset.csv --weights weights/oculoedge_best.pth --data-kind real --output output/evaluation
+$env:OCULOEDGE_MODEL = (Resolve-Path weights/oculoedge_best.pth).Path
+.\.venv\Scripts\python.exe run.py
+```
+
+El entrenamiento no descarga pesos; `--init` permite inicializar desde un checkpoint local con arquitectura compatible. Guarda los pesos y un manifiesto JSON con SHA-256, particiones, historial y configuración. Selecciona el checkpoint por pérdida de validación, no de entrenamiento. La app comprueba arquitectura, preprocesamiento y hash, y Grad-CAM usa exactamente el modelo que produce la clase. Tener un manifiesto de entrenamiento no constituye validación clínica.
+
+## Verificar informes
+
+1. Descargar PDF y registro JSON desde el mismo análisis.
+2. En «Verificar un informe», cargar el JSON y el PDF correspondiente.
+3. La app valida los HMAC con la clave local y compara SHA-256 del PDF.
+
+El QR contiene hashes y autenticador del registro, sin nombre ni folio. Los datos personales sí están en el PDF y el JSON exportados. La clave se crea en `.local/report.key`; no debe compartirse ni incluirse en el ZIP. Conservarla permite verificar informes anteriores. Otro equipo con otra clave no puede verificar su autenticidad. Esto es autenticación local mediante HMAC, no firma pública ni certificación institucional.
+
+## Paquete y desarrollo
+
+```powershell
+.\.venv\Scripts\python.exe tools/build_portable.py
+```
+
+El constructor usa el Python Windows y las dependencias ya instaladas, genera un manifiesto de archivos y un ZIP en `dist/`. La versión portable base no incluye PyTorch; las pruebas neuronales se ejecutan en el entorno de desarrollo. Los datos privados, las claves y los pesos sin procedencia se excluyen del paquete.
+
+Equipo: José Miguel Tapia Adán, Samuel Gutiérrez Tapia y Oswaldo Yahir Asis Ladino. Licencia MIT para el código propio; se incluyen licencias de terceros en el paquete. Asesor institucional: pendiente de identificación y validación por el equipo UTT.

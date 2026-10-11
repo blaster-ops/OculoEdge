@@ -1,150 +1,101 @@
-"""
-OculoEdge - Pipeline de Entrenamiento y Transfer Learning
-Permite entrenar o afinar la red neuronal MobileNetV3 con datasets reales
-(MESSIDOR-2, EyePACS, APTOS 2019) utilizando aumentación de datos y Focal Loss.
-"""
-
-import os
+"""Reproducible CPU training with patient-separated validation and checkpoint manifest."""
 import argparse
-import time
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms
-from PIL import Image
+from datetime import datetime, timezone
+import hashlib
+import json
+from pathlib import Path
+import random
 import numpy as np
-
-from core.model_engine import OculoEdgeNet
+from PIL import Image, ImageOps
+import torch
+from torch.utils.data import DataLoader, Dataset
+from core.neural import OculoEdgeNet, TRANSFORM, PREPROCESSING, ARCHITECTURE
 from core.preprocessor import enhance_retina_image
-
-
-class FocalLoss(nn.Module):
-    """Focal Loss para manejar el desbalance de clases clínico en retinopatía."""
-    def __init__(self, alpha=None, gamma=2.0):
-        super(FocalLoss, self).__init__()
-        self.gamma = gamma
-        self.alpha = alpha
-
-    def forward(self, inputs, targets):
-        ce_loss = nn.functional.cross_entropy(inputs, targets, reduction='none', weight=self.alpha)
-        pt = torch.exp(-ce_loss)
-        focal_loss = ((1.0 - pt) ** self.gamma) * ce_loss
-        return focal_loss.mean()
-
+from data.evaluation_dataset import load_manifest
 
 class FundusDataset(Dataset):
-    """Cargador de dataset de retinografías en estructura de carpetas (0 a 4) o lista."""
-    def __init__(self, file_paths, labels, transform=None):
-        self.file_paths = file_paths
-        self.labels = labels
-        self.transform = transform
-
+    def __init__(self, rows):
+        self.rows = rows
     def __len__(self):
-        return len(self.file_paths)
+        return len(self.rows)
+    def __getitem__(self, index):
+        row = self.rows[index]
+        with Image.open(row["path"]) as img:
+            array = np.array(ImageOps.exif_transpose(img).convert("RGB"))
+        _, processed = enhance_retina_image(array)
+        return TRANSFORM(processed), row["label"]
 
-    def __getitem__(self, idx):
-        path = self.file_paths[idx]
-        label = self.labels[idx]
-        
-        pil_img = Image.open(path).convert('RGB')
-        img_np = np.array(pil_img)
-        
-        # Preprocesar con filtro Ben Graham
-        _, processed = enhance_retina_image(img_np, target_size=(384, 384))
-        img_pil = Image.fromarray(processed)
-        
-        if self.transform:
-            img_tensor = self.transform(img_pil)
-        else:
-            img_tensor = transforms.ToTensor()(img_pil)
-            
-        return img_tensor, torch.tensor(label, dtype=torch.long)
-
-
-def train_model(data_dir: str, epochs: int = 15, batch_size: int = 16, lr: float = 1e-4, output_weights: str = "weights/oculoedge_best.pth"):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"[OculoEdge Training] Dispositivo activo: {device}")
-    
-    # Transformaciones con aumentación de datos médicos
-    train_transforms = transforms.Compose([
-        transforms.RandomHorizontalFlip(p=0.5),
-        transforms.RandomVerticalFlip(p=0.5),
-        transforms.RandomRotation(degrees=30),
-        transforms.ColorJitter(brightness=0.1, contrast=0.1),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
-    
-    # Cargar rutas de imágenes (soporta data_dir/<0..4>/image.jpg)
-    train_paths, train_labels = [], []
-    for grade in range(5):
-        grade_folder = os.path.join(data_dir, str(grade))
-        if os.path.exists(grade_folder):
-            for fname in os.listdir(grade_folder):
-                if fname.lower().endswith(('.jpg', '.jpeg', '.png')):
-                    train_paths.append(os.path.join(grade_folder, fname))
-                    train_labels.append(grade)
-
-    if len(train_paths) == 0:
-        print(f"[OculoEdge Training] No se encontraron imágenes estructuradas en {data_dir}/<0..4>/")
-        print("Estructura requerida: data_dir/0/ (Sano), data_dir/1/ (Leve), data_dir/2/ (Moderada), etc.")
-        return
-
-    print(f"[OculoEdge Training] Total de imágenes encontradas: {len(train_paths)}")
-    dataset = FundusDataset(train_paths, train_labels, transform=train_transforms)
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=2)
-
-    model = OculoEdgeNet(num_classes=5).to(device)
-    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
-    criterion = FocalLoss(gamma=2.0)
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
-
-    best_loss = float('inf')
-    os.makedirs(os.path.dirname(output_weights), exist_ok=True)
-
+def train_model(csv_path, epochs=15, batch_size=8, lr=1e-4, output_weights="weights/oculoedge_best.pth",
+                seed=42, data_kind="unspecified", initial_weights=None):
+    if epochs < 1 or batch_size < 1 or lr <= 0:
+        raise ValueError("Épocas, lote y tasa de aprendizaje deben ser positivos.")
+    random.seed(seed); np.random.seed(seed); torch.manual_seed(seed)
+    torch.set_num_threads(min(4, torch.get_num_threads()))
+    torch.use_deterministic_algorithms(True)
+    rows, csv_hash = load_manifest(csv_path)
+    train_rows = [r for r in rows if r["split"] == "train"]
+    val_rows = [r for r in rows if r["split"] == "val"]
+    if len(train_rows) < 2 or not val_rows or {r["label"] for r in train_rows} != set(range(5)):
+        raise ValueError("Se requieren entrenamiento con cinco clases y validación independiente.")
+    train = DataLoader(FundusDataset(train_rows), batch_size=batch_size, shuffle=True, num_workers=0,
+                       generator=torch.Generator().manual_seed(seed))
+    val = DataLoader(FundusDataset(val_rows), batch_size=batch_size, shuffle=False, num_workers=0)
+    model = OculoEdgeNet()
+    initialization = "random-no-download"
+    if initial_weights:
+        model.load_state_dict(torch.load(initial_weights, map_location="cpu", weights_only=True))
+        initialization = hashlib.sha256(Path(initial_weights).read_bytes()).hexdigest()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
+    loss_fn = torch.nn.CrossEntropyLoss()
+    out = Path(output_weights); out.parent.mkdir(parents=True, exist_ok=True)
+    best_loss = float("inf")
+    history = []
     for epoch in range(1, epochs + 1):
-        model.train()
-        running_loss = 0.0
-        correct = 0
-        total = 0
-        t0 = time.time()
-        
-        for inputs, targets in loader:
-            inputs, targets = inputs.to(device), targets.to(device)
-            optimizer.zero_grad()
-            outputs = model(inputs)
-            loss = criterion(outputs, targets)
-            loss.backward()
-            optimizer.step()
-            
-            running_loss += loss.item() * inputs.size(0)
-            preds = torch.argmax(outputs, dim=1)
-            correct += (preds == targets).sum().item()
-            total += targets.size(0)
-            
-        scheduler.step()
-        epoch_loss = running_loss / max(total, 1)
-        epoch_acc = (correct / max(total, 1)) * 100
-        el_time = time.time() - t0
-        
-        print(f"Época [{epoch:02d}/{epochs:02d}] - Pérdida: {epoch_loss:.4f} - Exactitud: {epoch_acc:.2f}% - Tiempo: {el_time:.1f}s")
-        
-        if epoch_loss < best_loss:
-            best_loss = epoch_loss
-            torch.save(model.state_dict(), output_weights)
-            print(f"  → Checkpoint guardado en: {output_weights}")
+        model.train(); total_loss = 0.; count = 0
+        for x, y in train:
+            optimizer.zero_grad(set_to_none=True)
+            logits = model(x); loss = loss_fn(logits, y)
+            if not torch.isfinite(loss):
+                raise ValueError("Pérdida no finita durante entrenamiento.")
+            loss.backward(); optimizer.step()
+            total_loss += loss.item() * len(y); count += len(y)
+        model.eval(); val_loss = 0.; val_count = 0; correct = 0
+        with torch.inference_mode():
+            for x, y in val:
+                logits = model(x)
+                val_loss += loss_fn(logits, y).item() * len(y)
+                correct += int((logits.argmax(1) == y).sum()); val_count += len(y)
+        row = {"epoch": epoch, "train_loss": total_loss / count,
+               "val_loss": val_loss / val_count, "val_accuracy": correct / val_count}
+        history.append(row)
+        print(json.dumps(row), flush=True)
+        if row["val_loss"] < best_loss:
+            best_loss = row["val_loss"]
+            torch.save(model.state_dict(), out)
+            best_epoch = epoch
+    manifest = {"architecture": ARCHITECTURE, "preprocessing": PREPROCESSING, "classes": list(range(5)),
+                "sha256": hashlib.sha256(out.read_bytes()).hexdigest(), "training_completed": True,
+                "clinically_validated": False, "calibrated": False, "dataset_kind": data_kind,
+                "dataset_manifest_sha256": csv_hash, "seed": seed, "epochs": epochs, "best_epoch": best_epoch,
+                "selection": "minimum_validation_cross_entropy", "training_images": len(train_rows),
+                "validation_images": len(val_rows), "initialization": initialization,
+                "created_at": datetime.now(timezone.utc).isoformat(), "torch_version": str(torch.__version__),
+                "history": history}
+    out.with_suffix(".json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    return manifest
 
-    print(f"[OculoEdge Training] Entrenamiento finalizado. Mejor checkpoint en: {output_weights}")
-
+def main():
+    parser = argparse.ArgumentParser(description="Entrenar MobileNetV3 con CSV y particiones por paciente.")
+    parser.add_argument("--csv", required=True)
+    parser.add_argument("--epochs", type=int, default=15)
+    parser.add_argument("--batch-size", type=int, default=8)
+    parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--output", default="weights/oculoedge_best.pth")
+    parser.add_argument("--data-kind", choices=["real", "synthetic", "unspecified"], default="unspecified")
+    parser.add_argument("--init", help="Checkpoint local para inicialización; no descarga pesos.")
+    args = parser.parse_args()
+    train_model(args.csv, args.epochs, args.batch_size, args.lr, args.output, args.seed, args.data_kind, args.init)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Entrenador de OculoEdge")
-    parser.add_argument("--data_dir", type=str, default="data/train", help="Ruta al directorio de imágenes organizadas por clases (0-4)")
-    parser.add_argument("--epochs", type=int, default=15, help="Número de épocas")
-    parser.add_argument("--batch_size", type=int, default=16, help="Tamaño de lote")
-    parser.add_argument("--lr", type=float, default=1e-4, help="Tasa de aprendizaje")
-    parser.add_argument("--output", type=str, default="weights/oculoedge_best.pth", help="Ruta del checkpoint de pesos")
-    args = parser.parse_args()
-    
-    train_model(args.data_dir, args.epochs, args.batch_size, args.lr, args.output)
+    main()

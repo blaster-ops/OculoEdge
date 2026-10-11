@@ -1,32 +1,23 @@
-# Formato F-01: Ficha de Inscripción y Resumen Ejecutivo
-**Feria Mexicana de Ciencias e Ingenierías • Capítulo Puebla 2026 (FEMECI-PUEBLA 2026)**
-**Secretaría de Ciencia, Humanidades, Tecnología e Innovación del Estado de Puebla**
+# OculoEdge: resumen ejecutivo para revisión del equipo
 
----
+FEMECI Puebla 2026 · UTT · Ingenierías / Sistemas Informáticos y Computación. Equipo: José Miguel Tapia Adán, Samuel Gutiérrez Tapia y Oswaldo Yahir Asis Ladino. Asesor: pendiente de identificación y validación institucional.
 
-### 1. Datos Generales del Proyecto
+## Problema y objetivo
 
-* **Título del Proyecto:**
-  OculoEdge: Sistema de Triaje Oftalmológico con Inteligencia Artificial en el Borde (Edge AI) y Explicabilidad Clínica (Grad-CAM) para Detección Temprana de Retinopatía Diabética en Comunidades Vulnerables del Estado de Puebla.
-* **Modalidad de Participación:** **Ingenierías** (Diseño, modelado y prueba de sistemas, prototipos y software especializado).
-* **Categoría Temática Oficial:** **Sistemas Informáticos y Computación**
-* **Subárea Especializada:** Robótica y Máquinas Inteligentes (Aprendizaje Automático y Visión Artificial) / Sistemas de Software.
-* **Institución Educativa:** **Universidad Tecnológica de Tehuacán (UTT)**.
-* **Nivel Educativo:** **Educación Superior**.
-* **Teléfono de Contacto:** `2381363368`
-* **Líder de Proyecto:** **José Miguel Tapia Adán** (Matrícula vigente UTT).
-* **Integrantes del Equipo (3):**
-  1. **José Miguel Tapia Adán** (Líder)
-  2. **Samuel Gutiérrez Tapia** (Investigador)
-  3. **Oswaldo Yahir Asis Ladino** (Investigador)
-* **Asesor(a) Docente:** *Por designar institucionalmente (Universidad Tecnológica de Tehuacán)*.
+Investigar una estación local para procesar imágenes de fondo de ojo, explicar el cálculo y generar resultados trazables en contextos con conectividad limitada.
 
----
+## Metodología
 
-### 2. Resumen Ejecutivo (Abstract Estructurado - 250 palabras)
+Aplicación offline con adquisición desde archivo o cámara USB, controles exploratorios de imagen, preprocesamiento Ben Graham, mediciones de píxeles, reglas experimentales transparentes y visualización de sus máscaras. Componente opcional de MobileNetV3 entrenable mediante CSV con particiones por paciente, inferencia local y Grad-CAM coherente con el modelo predictor. PDF del análisis mostrado y registros verificables mediante SHA-256/HMAC local.
 
-**Contexto y Planteamiento del Problema:** La diabetes mellitus representa una de las principales emergencias de salud pública en el Estado de Puebla. La retinopatía diabética (RD) es la causa primaria de ceguera irreversible en población en edad productiva. En zonas rurales y periurbanas de Puebla, el acceso a retinólogos o lámparas de hendidura especializadas es prácticamente nulo, derivando en diagnósticos tardíos cuando el daño ya es intratable. Asimismo, las soluciones basadas en computación en la nube son inviables debido a la brecha de conectividad digital y a las restricciones ético-legales de privacidad de datos clínicos sensibles (LFPDPPP).
+## Resultados disponibles
 
-**Objetivo y Metodología:** El equipo integrado por José Miguel Tapia Adán, Samuel Gutiérrez Tapia y Oswaldo Yahir Asis Ladino diseñó y construyó **OculoEdge**, un sistema ciber-clínico de triaje automatizado basado en Inteligencia Artificial en el Borde (*Edge AI*). El pipeline integra: (1) Preprocesamiento mediante centrado retiniano y sustracción Gaussiana local (Filtro de Ben Graham) para estandarizar variaciones lumínicas; (2) Red Neuronal Convolucional compacta (*MobileNetV3-Large*) optimizada para inferencia en CPU local sin conexión a internet; y (3) Explicabilidad visual mediante *Grad-CAM* (Gradient-weighted Class Activation Mapping) que genera mapas térmicos superpuestos sobre la retina, identificando microaneurismas, exudados y hemorragias.
+Los cinco casos sintéticos G0–G4 incluidos producen los patrones previstos. La suite de software cubre entradas no evaluables, límites, concurrencia, informes y verificación; además prueba entrenamiento e inferencia neuronal con datos sintéticos de integración. El benchmark guarda predicciones y métricas calculadas desde la ejecución. No hay ROC/AUC para el motor de reglas ni validación clínica sobre pacientes.
 
-**Resultados y Aporte:** Evaluado sobre cohortes estandarizadas (MESSIDOR-2 y EyePACS, $n=1,332$), OculoEdge alcanzó un **Área Bajo la Curva ROC (AUC) de 0.964**, con una **Sensibilidad del 95.2%** y **Especificidad del 93.6%** en triaje de retinopatía referible (ICDR Grados 2+), con una latencia de inferencia de $142.6\text{ ms}$ en hardware estándar y generación automática de reportes de derivación en PDF. OculoEdge democratiza el diagnóstico visual preventivo en comunidades marginadas de Puebla con estricta soberanía de datos.
+## Alcance y limitaciones
+
+Prototipo de investigación sin validación clínica. No diagnostica ni descarta enfermedad. Las muestras sintéticas no sustentan estimaciones clínicas de sensibilidad/especificidad. No se dispone de evaluación reproducible de 1,332 retinografías reales. El siguiente experimento requiere datos reales etiquetados, particiones independientes, análisis de rechazos y revisión especializada.
+
+## Estado documental
+
+Este resumen es contenido del proyecto para trasladar al formato oficial F-01; no sustituye el formulario de inscripción, las firmas ni la validación del asesor.

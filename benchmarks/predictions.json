@@ -1,0 +1,112 @@
+[
+  {
+    "file": "sample_grade_0_normal.jpg",
+    "image_sha256": "67246487600bc98e06021731a01b2591985b3084b4c89d302bb9958fc47e92a0",
+    "label": 0,
+    "prediction": 0,
+    "evaluable": true,
+    "latency_ms": 104.264,
+    "probabilities": [],
+    "quality": {
+      "evaluable": true,
+      "reasons": [],
+      "metrics": {
+        "width": 512,
+        "height": 512,
+        "visible_fraction": 0.665,
+        "contrast": 23.87,
+        "focus_variance": 129.51,
+        "retinal_color_fraction": 0.993
+      },
+      "notice": "Control exploratorio de adquisición; no confirma origen retiniano ni calidad diagnóstica."
+    }
+  },
+  {
+    "file": "sample_grade_1_leve.jpg",
+    "image_sha256": "72180805b753d5ca0080fd3373bd80df4b8e4da567dd9257d1368760107a1f94",
+    "label": 1,
+    "prediction": 1,
+    "evaluable": true,
+    "latency_ms": 92.004,
+    "probabilities": [],
+    "quality": {
+      "evaluable": true,
+      "reasons": [],
+      "metrics": {
+        "width": 512,
+        "height": 512,
+        "visible_fraction": 0.665,
+        "contrast": 23.9,
+        "focus_variance": 131.72,
+        "retinal_color_fraction": 0.993
+      },
+      "notice": "Control exploratorio de adquisición; no confirma origen retiniano ni calidad diagnóstica."
+    }
+  },
+  {
+    "file": "sample_grade_2_moderada.jpg",
+    "image_sha256": "2333bcd9d2572ef9a26213975b9d55d11ab3f028574e1a16decf2ff1e0a08b57",
+    "label": 2,
+    "prediction": 2,
+    "evaluable": true,
+    "latency_ms": 97.68,
+    "probabilities": [],
+    "quality": {
+      "evaluable": true,
+      "reasons": [],
+      "metrics": {
+        "width": 512,
+        "height": 512,
+        "visible_fraction": 0.665,
+        "contrast": 25.07,
+        "focus_variance": 176.49,
+        "retinal_color_fraction": 0.992
+      },
+      "notice": "Control exploratorio de adquisición; no confirma origen retiniano ni calidad diagnóstica."
+    }
+  },
+  {
+    "file": "sample_grade_3_severa.jpg",
+    "image_sha256": "8b18f53499c876111fa5bf4d21f8680817361146b3a132bf7bb2c36172dff167",
+    "label": 3,
+    "prediction": 3,
+    "evaluable": true,
+    "latency_ms": 106.545,
+    "probabilities": [],
+    "quality": {
+      "evaluable": true,
+      "reasons": [],
+      "metrics": {
+        "width": 512,
+        "height": 512,
+        "visible_fraction": 0.664,
+        "contrast": 27.78,
+        "focus_variance": 198.23,
+        "retinal_color_fraction": 0.983
+      },
+      "notice": "Control exploratorio de adquisición; no confirma origen retiniano ni calidad diagnóstica."
+    }
+  },
+  {
+    "file": "sample_grade_4_proliferativa.jpg",
+    "image_sha256": "715c8411fa14007d576c78989d3eb0a332b853b264a6a20252985d7690bf3661",
+    "label": 4,
+    "prediction": 4,
+    "evaluable": true,
+    "latency_ms": 107.738,
+    "probabilities": [],
+    "quality": {
+      "evaluable": true,
+      "reasons": [],
+      "metrics": {
+        "width": 512,
+        "height": 512,
+        "visible_fraction": 0.629,
+        "contrast": 23.48,
+        "focus_variance": 206.99,
+        "retinal_color_fraction": 0.994
+      },
+      "notice": "Control exploratorio de adquisición; no confirma origen retiniano ni calidad diagnóstica."
+    }
+  }
+]

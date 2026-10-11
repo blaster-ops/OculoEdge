@@ -56,6 +56,12 @@ def enhance_retina_image(image_np: np.ndarray, target_size: Tuple[int, int] = (3
 
     Retorna: (imagen_recortada_rgb, imagen_filtrada_ben_graham)
     """
+    if not isinstance(image_np, np.ndarray) or image_np.ndim != 3 or image_np.shape[2] != 3 or image_np.dtype != np.uint8:
+        raise ValueError("Se requiere una imagen RGB uint8.")
+    if min(image_np.shape[:2]) == 0:
+        raise ValueError("Imagen vacía.")
+    if len(target_size) != 2 or min(target_size) < 1:
+        raise ValueError("Tamaño de salida inválido.")
     # 1. Recorte inteligente
     cropped = crop_image_from_gray(image_np)
     if cropped.shape[0] < 20 or cropped.shape[1] < 20:
@@ -68,9 +74,9 @@ def enhance_retina_image(image_np: np.ndarray, target_size: Tuple[int, int] = (3
     filtered = ben_graham_filter(resized, sigma_x=target_size[0] // 10)
 
     # 4. Máscara circular
-    mask = np.zeros(target_size, dtype=np.uint8)
+    mask = np.zeros((target_size[1], target_size[0]), dtype=np.uint8)
     center = (target_size[0] // 2, target_size[1] // 2)
-    radius = int(target_size[0] * 0.48)
+    radius = int(min(target_size) * 0.48)
     cv2.circle(mask, center, radius, 1, -1)
 
     filtered_masked = cv2.bitwise_and(filtered, filtered, mask=mask)
